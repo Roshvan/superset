@@ -30,7 +30,7 @@ export function NewWorkspaceModalContent({
 	onNewProject,
 }: NewWorkspaceModalContentProps) {
 	const { draft, updateDraft } = useNewWorkspaceModalDraft();
-	const { data: recentProjects = [] } =
+	const { data: recentProjects = [], isFetched: areRecentProjectsFetched } =
 		electronTrpc.projects.getRecents.useQuery();
 	const utils = electronTrpc.useUtils();
 
@@ -55,14 +55,22 @@ export function NewWorkspaceModalContent({
 
 		if (
 			preSelectedProjectId &&
-			appliedPreSelectionRef.current !== preSelectedProjectId
+			preSelectedProjectId !== appliedPreSelectionRef.current
 		) {
-			appliedPreSelectionRef.current = preSelectedProjectId;
-			if (preSelectedProjectId !== draft.selectedProjectId) {
-				updateDraft({ selectedProjectId: preSelectedProjectId });
+			if (!areRecentProjectsFetched) return;
+			const hasPreSelectedProject = recentProjects.some(
+				(project) => project.id === preSelectedProjectId,
+			);
+			if (hasPreSelectedProject) {
+				appliedPreSelectionRef.current = preSelectedProjectId;
+				if (preSelectedProjectId !== draft.selectedProjectId) {
+					updateDraft({ selectedProjectId: preSelectedProjectId });
+				}
+				return;
 			}
-			return;
 		}
+
+		if (!areRecentProjectsFetched) return;
 
 		const hasSelectedProject = recentProjects.some(
 			(project) => project.id === draft.selectedProjectId,
@@ -72,6 +80,7 @@ export function NewWorkspaceModalContent({
 		}
 	}, [
 		draft.selectedProjectId,
+		areRecentProjectsFetched,
 		isOpen,
 		preSelectedProjectId,
 		recentProjects,

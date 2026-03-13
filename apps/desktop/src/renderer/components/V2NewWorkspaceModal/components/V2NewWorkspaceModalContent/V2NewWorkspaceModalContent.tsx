@@ -41,6 +41,7 @@ export function V2NewWorkspaceModalContent({
 		[collections],
 	);
 	const v2Projects = useMemo(() => v2ProjectsData ?? [], [v2ProjectsData]);
+	const areV2ProjectsReady = v2ProjectsData !== undefined;
 
 	const appliedPreSelectionRef = useRef<string | null>(null);
 
@@ -57,15 +58,22 @@ export function V2NewWorkspaceModalContent({
 		// Only use preSelectedProjectId if it matches an actual v2 project
 		if (
 			preSelectedProjectId &&
-			appliedPreSelectionRef.current !== preSelectedProjectId &&
-			v2Projects.some((p) => p.id === preSelectedProjectId)
+			preSelectedProjectId !== appliedPreSelectionRef.current
 		) {
-			appliedPreSelectionRef.current = preSelectedProjectId;
-			if (preSelectedProjectId !== draft.selectedProjectId) {
-				updateDraft({ selectedProjectId: preSelectedProjectId });
+			if (!areV2ProjectsReady) return;
+			const hasPreSelectedProject = v2Projects.some(
+				(project) => project.id === preSelectedProjectId,
+			);
+			if (hasPreSelectedProject) {
+				appliedPreSelectionRef.current = preSelectedProjectId;
+				if (preSelectedProjectId !== draft.selectedProjectId) {
+					updateDraft({ selectedProjectId: preSelectedProjectId });
+				}
+				return;
 			}
-			return;
 		}
+
+		if (!areV2ProjectsReady) return;
 
 		const hasSelectedProject = v2Projects.some(
 			(project) => project.id === draft.selectedProjectId,
@@ -75,6 +83,7 @@ export function V2NewWorkspaceModalContent({
 		}
 	}, [
 		draft.selectedProjectId,
+		areV2ProjectsReady,
 		isOpen,
 		preSelectedProjectId,
 		v2Projects,

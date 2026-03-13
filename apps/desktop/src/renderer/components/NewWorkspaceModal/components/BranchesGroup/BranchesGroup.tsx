@@ -5,7 +5,6 @@ import { cn } from "@superset/ui/utils";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoArrowUpRight, GoGitBranch, GoGlobe } from "react-icons/go";
-
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useImportAllWorktrees } from "renderer/react-query/workspaces";
 import { navigateToWorkspace } from "renderer/routes/_authenticated/_dashboard/utils/workspace-navigation";
@@ -19,6 +18,7 @@ interface BranchesGroupProps {
 }
 
 const PAGE_SIZE = 50;
+const BRANCH_SEARCH_LIMIT = 5000;
 
 type BranchFilterMode = "all" | "worktrees";
 
@@ -54,7 +54,7 @@ export function BranchesGroup({ projectId }: BranchesGroupProps) {
 		{
 			projectId: projectId ?? "",
 			search: "",
-			limit: 5000,
+			limit: BRANCH_SEARCH_LIMIT,
 			offset: 0,
 		},
 		{

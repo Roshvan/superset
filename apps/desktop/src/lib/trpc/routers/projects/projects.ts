@@ -213,6 +213,7 @@ async function ensureMainWorkspace(project: Project): Promise<void> {
 const SAFE_REPO_NAME_REGEX = /^[a-zA-Z0-9._\- ]+$/;
 const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:", "ssh:", "git:"]);
 const SSH_GIT_URL_REGEX = /^[\w.-]+@[\w.-]+:[\w./-]+$/;
+const BRANCH_SEARCH_LIMIT = 5000;
 
 /** Extract the repository name from a git URL (HTTPS, SSH, or git:// protocol). */
 function extractRepoName(urlInput: string): string | null {
@@ -660,7 +661,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				z.object({
 					projectId: z.string(),
 					search: z.string().default(""),
-					limit: z.number().min(1).max(200).default(50),
+					limit: z.number().min(1).max(BRANCH_SEARCH_LIMIT).default(50),
 					offset: z.number().min(0).default(0),
 				}),
 			)

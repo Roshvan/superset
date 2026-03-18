@@ -15,6 +15,10 @@ import { applyUIColors, toXtermTheme, updateThemeClass } from "./utils";
 /** Special theme ID for system preference (follows OS dark/light mode) */
 export const SYSTEM_THEME_ID = "system";
 
+/** Built-in fallback theme IDs for system mode */
+const DEFAULT_LIGHT_THEME_ID = "light";
+const DEFAULT_DARK_THEME_ID = "dark";
+
 interface ThemeState {
 	/** Current active theme ID (can be "system" or a specific theme ID) */
 	activeThemeId: string;
@@ -83,7 +87,9 @@ function resolveThemeId(
 	if (themeId === SYSTEM_THEME_ID) {
 		const prefersDark = getSystemPreferredThemeType() === "dark";
 		const preferredId = prefersDark ? systemDarkThemeId : systemLightThemeId;
-		const fallbackId = prefersDark ? "dark" : "light";
+		const fallbackId = prefersDark
+			? DEFAULT_DARK_THEME_ID
+			: DEFAULT_LIGHT_THEME_ID;
 
 		// Validate that the preferred ID still references an existing theme
 		if (findTheme(preferredId, customThemes)) {
@@ -150,8 +156,8 @@ export const useThemeStore = create<ThemeState>()(
 			(set, get) => ({
 				activeThemeId: DEFAULT_THEME_ID,
 				customThemes: [],
-				systemLightThemeId: "light",
-				systemDarkThemeId: "dark",
+				systemLightThemeId: DEFAULT_LIGHT_THEME_ID,
+				systemDarkThemeId: DEFAULT_DARK_THEME_ID,
 				activeTheme: null,
 				terminalTheme: null,
 
@@ -187,14 +193,12 @@ export const useThemeStore = create<ThemeState>()(
 					) {
 						return;
 					}
-					const updates =
+					const prefUpdate =
 						mode === "light"
 							? { systemLightThemeId: themeId }
 							: { systemDarkThemeId: themeId };
 
-					set(updates);
-
-					// Re-resolve if system theme is currently active
+					// Re-resolve if system theme is currently active, batching into a single set()
 					if (state.activeThemeId === SYSTEM_THEME_ID) {
 						const newLightId =
 							mode === "light" ? themeId : state.systemLightThemeId;
@@ -209,9 +213,12 @@ export const useThemeStore = create<ThemeState>()(
 						const theme = findTheme(resolvedId, state.customThemes);
 						if (theme) {
 							const { terminalTheme } = applyTheme(theme);
-							set({ activeTheme: theme, terminalTheme });
+							set({ ...prefUpdate, activeTheme: theme, terminalTheme });
+							return;
 						}
 					}
+
+					set(prefUpdate);
 				},
 
 				addCustomTheme: (theme: Theme) => {
@@ -282,26 +289,25 @@ export const useThemeStore = create<ThemeState>()(
 					// Reset system preferences if they reference the deleted theme
 					const newLightId =
 						state.systemLightThemeId === themeId
-							? "light"
+							? DEFAULT_LIGHT_THEME_ID
 							: state.systemLightThemeId;
 					const newDarkId =
 						state.systemDarkThemeId === themeId
-							? "dark"
+							? DEFAULT_DARK_THEME_ID
 							: state.systemDarkThemeId;
 
 					const customThemes = state.customThemes.filter(
 						(t) => t.id !== themeId,
 					);
 
-					set({
+					const baseUpdate = {
 						customThemes,
 						systemLightThemeId: newLightId,
 						systemDarkThemeId: newDarkId,
-					});
+					};
 
-					// Re-resolve active theme if system mode is active
-					const currentState = get();
-					if (currentState.activeThemeId === SYSTEM_THEME_ID) {
+					// Re-resolve active theme if system mode is active, batching into a single set()
+					if (state.activeThemeId === SYSTEM_THEME_ID) {
 						const resolvedId = resolveThemeId(
 							SYSTEM_THEME_ID,
 							newLightId,
@@ -311,9 +317,12 @@ export const useThemeStore = create<ThemeState>()(
 						const theme = findTheme(resolvedId, customThemes);
 						if (theme) {
 							const { terminalTheme } = applyTheme(theme);
-							set({ activeTheme: theme, terminalTheme });
+							set({ ...baseUpdate, activeTheme: theme, terminalTheme });
+							return;
 						}
 					}
+
+					set(baseUpdate);
 				},
 
 				getAllThemes: () => {
@@ -343,10 +352,10 @@ export const useThemeStore = create<ThemeState>()(
 					);
 					const normalizedLightId = lightExists
 						? state.systemLightThemeId
-						: "light";
+						: DEFAULT_LIGHT_THEME_ID;
 					const normalizedDarkId = darkExists
 						? state.systemDarkThemeId
-						: "dark";
+						: DEFAULT_DARK_THEME_ID;
 
 					if (!lightExists || !darkExists) {
 						set({

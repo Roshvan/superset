@@ -181,6 +181,12 @@ export const useThemeStore = create<ThemeState>()(
 
 				setSystemThemePreference: (mode: "light" | "dark", themeId: string) => {
 					const state = get();
+					if (
+						themeId === SYSTEM_THEME_ID ||
+						!findTheme(themeId, state.customThemes)
+					) {
+						return;
+					}
 					const updates =
 						mode === "light"
 							? { systemLightThemeId: themeId }

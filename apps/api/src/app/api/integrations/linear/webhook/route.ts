@@ -188,6 +188,10 @@ async function processIssueEvent(
 			externalId: issue.id,
 			externalKey: issue.identifier,
 			externalUrl: issue.url,
+			externalProjectId: issue.project?.id ?? null,
+			externalProjectName: issue.project?.name ?? null,
+			externalCycleId: issue.cycle?.id ?? null,
+			externalCycleName: issue.cycle?.name ?? null,
 			lastSyncedAt: new Date(),
 		};
 

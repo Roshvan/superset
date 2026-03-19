@@ -188,6 +188,12 @@ async function processIssueEvent(
 			externalId: issue.id,
 			externalKey: issue.identifier,
 			externalUrl: issue.url,
+			externalProjectId:
+				(issue as unknown as Record<string, string>).projectId ?? null,
+			externalProjectName: null,
+			externalCycleId:
+				(issue as unknown as Record<string, string>).cycleId ?? null,
+			externalCycleName: null,
 			lastSyncedAt: new Date(),
 		};
 

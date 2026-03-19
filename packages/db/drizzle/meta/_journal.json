@@ -204,6 +204,13 @@
       "when": 1773379684617,
       "tag": "0028_v2_workspace_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1773883267714,
+      "tag": "0029_add_external_project_and_cycle_to_tasks",
+      "breakpoints": true
     }
   ]
 }

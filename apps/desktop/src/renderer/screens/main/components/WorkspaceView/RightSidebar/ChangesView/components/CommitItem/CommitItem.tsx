@@ -18,7 +18,7 @@ interface CommitItemProps {
 	onToggle: () => void;
 	selectedFile: ChangedFile | null;
 	selectedCommitHash: string | null;
-	onFileSelect: (file: ChangedFile, commitHash: string) => void;
+	onFileSelect: (file: ChangedFile, commitHash: string, openInNewTab?: boolean) => void;
 	viewMode: ChangesViewMode;
 	worktreePath: string;
 	isExpandedView?: boolean;
@@ -82,8 +82,8 @@ export function CommitItem({
 }: CommitItemProps) {
 	const hasFiles = commit.files.length > 0;
 
-	const handleFileSelect = (file: ChangedFile) => {
-		onFileSelect(file, commit.hash);
+	const handleFileSelect = (file: ChangedFile, openInNewTab?: boolean) => {
+		onFileSelect(file, commit.hash, openInNewTab);
 	};
 
 	const isCommitSelected = selectedCommitHash === commit.hash;

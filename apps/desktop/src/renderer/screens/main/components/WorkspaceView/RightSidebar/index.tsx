@@ -133,7 +133,7 @@ export function RightSidebar() {
 	);
 
 	const handleFileOpenPane = useCallback(
-		(file: ChangedFile, category: ChangeCategory, commitHash?: string) => {
+		(file: ChangedFile, category: ChangeCategory, commitHash?: string, openInNewTab?: boolean) => {
 			if (!workspaceId || !worktreePath) return;
 			const absolutePath = toAbsoluteWorkspacePath(worktreePath, file.path);
 			addFileViewerPane(workspaceId, {
@@ -144,6 +144,7 @@ export function RightSidebar() {
 				oldPath: file.oldPath
 					? toAbsoluteWorkspacePath(worktreePath, file.oldPath)
 					: undefined,
+				openInNewTab,
 			});
 			invalidateFileContent(absolutePath);
 		},

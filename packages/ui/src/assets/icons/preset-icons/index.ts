@@ -4,6 +4,7 @@ import codexWhiteIcon from "./codex-white.svg";
 import copilotIcon from "./copilot.svg";
 import copilotWhiteIcon from "./copilot-white.svg";
 import cursorAgentIcon from "./cursor.svg";
+import droidIcon from "./droid.svg";
 import geminiIcon from "./gemini.svg";
 import opencodeIcon from "./opencode.svg";
 import opencodeWhiteIcon from "./opencode-white.svg";
@@ -26,6 +27,7 @@ export const PRESET_ICONS: Record<string, PresetIconSet> = {
 	"superset-chat": { light: supersetIcon, dark: supersetIcon },
 	"cursor-agent": { light: cursorAgentIcon, dark: cursorAgentIcon },
 	opencode: { light: opencodeIcon, dark: opencodeWhiteIcon },
+	droid: { light: droidIcon, dark: droidIcon },
 };
 
 export function getPresetIcon(
@@ -45,6 +47,7 @@ export {
 	copilotIcon,
 	copilotWhiteIcon,
 	cursorAgentIcon,
+	droidIcon,
 	geminiIcon,
 	opencodeIcon,
 	opencodeWhiteIcon,

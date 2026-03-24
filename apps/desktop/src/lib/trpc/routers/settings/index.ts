@@ -141,6 +141,7 @@ const DEFAULT_PRESET_AGENTS = [
 	"opencode",
 	"pi",
 	"gemini",
+	"droid",
 ] as const;
 
 const DEFAULT_PRESETS: Omit<TerminalPreset, "id">[] = DEFAULT_PRESET_AGENTS.map(

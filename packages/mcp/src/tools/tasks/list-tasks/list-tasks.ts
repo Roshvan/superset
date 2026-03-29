@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@superset/db/client";
+import { type TaskPriority, taskPriorityValues } from "@superset/db/enums";
 import { taskStatuses, tasks, users } from "@superset/db/schema";
 import type { SQL } from "drizzle-orm";
 import {
@@ -25,11 +26,8 @@ type TaskStatusType =
 	| "completed"
 	| "canceled";
 
-const PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
-type TaskPriority = (typeof PRIORITIES)[number];
-
 function isPriority(value: unknown): value is TaskPriority {
-	return PRIORITIES.includes(value as TaskPriority);
+	return (taskPriorityValues as readonly string[]).includes(value as string);
 }
 
 export function register(server: McpServer) {
@@ -53,9 +51,7 @@ export function register(server: McpServer) {
 					.boolean()
 					.optional()
 					.describe("Filter to tasks created by current user"),
-				priority: z
-					.enum(["urgent", "high", "medium", "low", "none"])
-					.optional(),
+				priority: z.enum(taskPriorityValues).optional(),
 				labels: z
 					.array(z.string())
 					.optional()
@@ -77,12 +73,16 @@ export function register(server: McpServer) {
 					.string()
 					.datetime({ offset: true })
 					.optional()
-					.describe("Tasks due on or after this date (ISO)"),
+					.describe(
+						"Tasks due on or after this date (ISO datetime, normalized to UTC day start)",
+					),
 				dueDateTo: z
 					.string()
 					.datetime({ offset: true })
 					.optional()
-					.describe("Tasks due on or before this date (ISO)"),
+					.describe(
+						"Tasks due on or before this date (ISO datetime, normalized to UTC day end)",
+					),
 				sortBy: z
 					.enum(["createdAt", "updatedAt", "dueDate", "priority"])
 					.optional()

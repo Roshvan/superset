@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type ViewMode = "table" | "board";
-export type TypeTab = "tasks" | "prs" | "issues";
+export type TypeTab = "tasks" | "issues";
 export type FilterTab = "all" | "active" | "backlog";
 
 interface TasksFilterState {
@@ -43,7 +43,16 @@ export const useTasksFilterStore = create<TasksFilterState>()(
 		}),
 		{
 			name: "tasks-filter-state",
-			version: 1,
+			version: 2,
+			migrate: (persistedState: unknown) => {
+				const state = persistedState as Partial<TasksFilterState> & {
+					typeTab?: string;
+				};
+				return {
+					...state,
+					typeTab: state.typeTab === "issues" ? "issues" : "tasks",
+				} as TasksFilterState;
+			},
 			partialize: (state) => ({
 				projectFilter: state.projectFilter,
 				linearProjectFilter: state.linearProjectFilter,

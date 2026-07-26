@@ -1,9 +1,14 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import { useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { GoGitPullRequest } from "react-icons/go";
 import { HiOutlineClipboardDocumentList } from "react-icons/hi2";
 import { LuLayers } from "react-icons/lu";
 import { GATED_FEATURES, usePaywall } from "renderer/components/Paywall";
+import {
+	pullRequestsSearchFromFilters,
+	usePullRequestsFilterStore,
+} from "renderer/routes/_authenticated/_dashboard/pull-requests/stores/pullRequestsFilterStore";
 import {
 	tasksSearchFromFilters,
 	useTasksFilterStore,
@@ -24,6 +29,10 @@ export function WorkspaceSidebarHeader({
 
 	const isWorkspacesListOpen = !!matchRoute({ to: "/workspaces" });
 	const isTasksOpen = !!matchRoute({ to: "/tasks", fuzzy: true });
+	const isPullRequestsOpen = !!matchRoute({
+		to: "/pull-requests",
+		fuzzy: true,
+	});
 
 	const handleWorkspacesClick = () => {
 		if (isWorkspacesListOpen) {
@@ -42,6 +51,10 @@ export function WorkspaceSidebarHeader({
 		projectFilter: lastProjectFilter,
 		linearProjectFilter: lastLinearProjectFilter,
 	} = useTasksFilterStore();
+	const {
+		projectFilter: lastPullRequestsProjectFilter,
+		includeClosed: lastPullRequestsIncludeClosed,
+	} = usePullRequestsFilterStore();
 
 	const handleTasksClick = () => {
 		gateFeature(GATED_FEATURES.TASKS, () => {
@@ -54,6 +67,19 @@ export function WorkspaceSidebarHeader({
 					typeTab: lastTypeTab,
 					projectFilter: lastProjectFilter,
 					linearProjectFilter: lastLinearProjectFilter,
+				}),
+			});
+		});
+	};
+
+	const handlePullRequestsClick = () => {
+		gateFeature(GATED_FEATURES.TASKS, () => {
+			navigate({
+				to: "/pull-requests",
+				search: pullRequestsSearchFromFilters({
+					search: "",
+					projectFilter: lastPullRequestsProjectFilter,
+					includeClosed: lastPullRequestsIncludeClosed,
 				}),
 			});
 		});
@@ -85,6 +111,8 @@ export function WorkspaceSidebarHeader({
 						<button
 							type="button"
 							onClick={handleTasksClick}
+							aria-label="Tasks"
+							aria-current={isTasksOpen ? "page" : undefined}
 							className={cn(
 								"flex items-center justify-center size-8 rounded-md transition-colors",
 								isTasksOpen
@@ -98,7 +126,27 @@ export function WorkspaceSidebarHeader({
 							/>
 						</button>
 					</TooltipTrigger>
-					<TooltipContent side="right">Tasks & PRs</TooltipContent>
+					<TooltipContent side="right">Tasks</TooltipContent>
+				</Tooltip>
+
+				<Tooltip delayDuration={300}>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							onClick={handlePullRequestsClick}
+							aria-label="Pull requests"
+							aria-current={isPullRequestsOpen ? "page" : undefined}
+							className={cn(
+								"flex items-center justify-center size-8 rounded-md transition-colors",
+								isPullRequestsOpen
+									? "text-foreground bg-fill-selected"
+									: "text-muted-foreground hover:text-foreground hover:bg-fill-hover",
+							)}
+						>
+							<GoGitPullRequest className="size-4" strokeWidth={STROKE_WIDTH} />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="right">Pull requests</TooltipContent>
 				</Tooltip>
 
 				<NewWorkspaceButton isCollapsed />
@@ -127,6 +175,8 @@ export function WorkspaceSidebarHeader({
 			<button
 				type="button"
 				onClick={handleTasksClick}
+				aria-label="Tasks"
+				aria-current={isTasksOpen ? "page" : undefined}
 				className={cn(
 					"flex items-center gap-2 px-2 py-1.5 w-full rounded-md transition-colors",
 					isTasksOpen
@@ -140,8 +190,26 @@ export function WorkspaceSidebarHeader({
 						strokeWidth={STROKE_WIDTH}
 					/>
 				</div>
+				<span className="text-sm font-medium flex-1 text-left">Tasks</span>
+			</button>
+
+			<button
+				type="button"
+				onClick={handlePullRequestsClick}
+				aria-label="Pull requests"
+				aria-current={isPullRequestsOpen ? "page" : undefined}
+				className={cn(
+					"flex items-center gap-2 px-2 py-1.5 w-full rounded-md transition-colors",
+					isPullRequestsOpen
+						? "text-foreground bg-fill-selected"
+						: "text-muted-foreground hover:text-foreground hover:bg-fill-hover",
+				)}
+			>
+				<div className="flex items-center justify-center size-5">
+					<GoGitPullRequest className="size-4" strokeWidth={STROKE_WIDTH} />
+				</div>
 				<span className="text-sm font-medium flex-1 text-left">
-					Tasks & PRs
+					Pull requests
 				</span>
 			</button>
 

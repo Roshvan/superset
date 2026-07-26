@@ -2,14 +2,7 @@ import { Button } from "@superset/ui/button";
 import { Checkbox } from "@superset/ui/checkbox";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import {
-	useCallback,
-	useEffect,
-	useId,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoIssueClosed, GoIssueOpened } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
@@ -32,6 +25,7 @@ export interface SelectedIssue {
 interface GitHubIssuesContentProps {
 	projectFilter: string | null;
 	searchQuery: string;
+	includeClosed: boolean;
 	onCollapse?: () => void;
 	onSelectionChange?: (
 		issues: SelectedIssue[],
@@ -44,11 +38,10 @@ const PAGE_SIZE = 30;
 export function GitHubIssuesContent({
 	projectFilter,
 	searchQuery,
+	includeClosed,
 	onCollapse,
 	onSelectionChange,
 }: GitHubIssuesContentProps) {
-	const [showClosed, setShowClosed] = useState(false);
-	const showClosedId = useId();
 	const [selectedIssues, setSelectedIssues] = useState<
 		Map<number, SelectedIssue>
 	>(new Map());
@@ -74,7 +67,7 @@ export function GitHubIssuesContent({
 			projectFilter,
 			hostUrl,
 			debouncedQuery.trim(),
-			showClosed,
+			includeClosed,
 		],
 		queryFn: async ({ pageParam }) => {
 			if (!hostUrl || !projectFilter) {
@@ -90,7 +83,7 @@ export function GitHubIssuesContent({
 				projectId: projectFilter,
 				query: debouncedQuery.trim() || undefined,
 				limit: PAGE_SIZE,
-				includeClosed: showClosed,
+				includeClosed,
 				page: pageParam,
 			});
 		},
@@ -212,15 +205,13 @@ export function GitHubIssuesContent({
 		<div className="@container flex flex-col h-full overflow-hidden">
 			<div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30 shrink-0">
 				<GoIssueOpened className="size-3.5 text-muted-foreground" />
-				<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-					GitHub issues
-				</span>
-				<span className="ml-auto text-xs text-muted-foreground tabular-nums">
-					{countLabel}
+				<span className="text-xs text-muted-foreground">
+					<span className="tabular-nums">{countLabel}</span> GitHub issues
 				</span>
 				<Button
 					variant="ghost"
 					size="icon-xs"
+					className="ml-auto"
 					title="Refresh"
 					disabled={isFetching}
 					onClick={() => refetch()}
@@ -238,23 +229,6 @@ export function GitHubIssuesContent({
 					>
 						<LuMinus className="size-3.5" />
 					</Button>
-				)}
-			</div>
-
-			<div className="flex items-center gap-2 px-4 py-1.5 border-b text-xs shrink-0">
-				<Checkbox
-					id={showClosedId}
-					checked={showClosed}
-					onCheckedChange={(checked) => setShowClosed(checked === true)}
-				/>
-				<label
-					htmlFor={showClosedId}
-					className="cursor-pointer select-none text-muted-foreground"
-				>
-					Show closed
-				</label>
-				{isFetching && !isInitialLoad && (
-					<span className="ml-auto text-muted-foreground">Loading…</span>
 				)}
 			</div>
 
@@ -279,7 +253,7 @@ export function GitHubIssuesContent({
 				) : totalCount === 0 && !isFetching && !error ? (
 					<div className="flex h-full items-center justify-center p-8">
 						<span className="text-sm text-muted-foreground">
-							{showClosed ? "No issues found." : "No open issues."}
+							{includeClosed ? "No issues found." : "No open issues."}
 						</span>
 					</div>
 				) : (

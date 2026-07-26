@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { TasksView } from "./components/TasksView";
 import { Route as TasksLayoutRoute } from "./layout";
 
@@ -9,6 +9,18 @@ export const Route = createFileRoute("/_authenticated/_dashboard/tasks/")({
 function TasksPage() {
 	const { tab, assignee, search, type, project, linearProject } =
 		TasksLayoutRoute.useSearch();
+	if (type === "prs") {
+		return (
+			<Navigate
+				to="/pull-requests"
+				search={{
+					search,
+					project,
+				}}
+				replace
+			/>
+		);
+	}
 	return (
 		<TasksView
 			initialTab={tab}

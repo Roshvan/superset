@@ -57,7 +57,7 @@ function TaskDetailPage() {
 			tab: tab ?? "all",
 			assignee: assignee ?? null,
 			search: searchQuery ?? "",
-			typeTab: type ?? "tasks",
+			typeTab: type === "issues" ? "issues" : "tasks",
 			projectFilter: project ?? null,
 			linearProjectFilter: linearProject ?? null,
 		});

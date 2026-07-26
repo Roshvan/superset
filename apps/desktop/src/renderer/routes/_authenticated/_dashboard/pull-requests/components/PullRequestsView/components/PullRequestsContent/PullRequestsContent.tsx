@@ -1,8 +1,7 @@
 import { Button } from "@superset/ui/button";
-import { Checkbox } from "@superset/ui/checkbox";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { GoGitPullRequest } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
@@ -22,6 +21,7 @@ import { useOpenNewWorkspaceModal } from "renderer/stores/new-workspace-modal";
 interface PullRequestsContentProps {
 	projectFilter: string | null;
 	searchQuery: string;
+	includeClosed: boolean;
 	onCollapse?: () => void;
 }
 
@@ -30,10 +30,9 @@ const PAGE_SIZE = 30;
 export function PullRequestsContent({
 	projectFilter,
 	searchQuery,
+	includeClosed,
 	onCollapse,
 }: PullRequestsContentProps) {
-	const [showClosed, setShowClosed] = useState(false);
-	const showClosedId = useId();
 	const debouncedQuery = useDebouncedValue(searchQuery, 300);
 	const hostUrl = useHostUrl(null);
 	const navigate = useNavigate();
@@ -51,12 +50,12 @@ export function PullRequestsContent({
 		refetch,
 	} = useInfiniteQuery({
 		queryKey: [
-			"tasks",
+			"pullRequests",
 			"searchPullRequests",
 			projectFilter,
 			hostUrl,
 			debouncedQuery.trim(),
-			showClosed,
+			includeClosed,
 		],
 		queryFn: async ({ pageParam }) => {
 			if (!hostUrl || !projectFilter) {
@@ -72,7 +71,7 @@ export function PullRequestsContent({
 				projectId: projectFilter,
 				query: debouncedQuery.trim() || undefined,
 				limit: PAGE_SIZE,
-				includeClosed: showClosed,
+				includeClosed,
 				page: pageParam,
 			});
 		},
@@ -132,9 +131,13 @@ export function PullRequestsContent({
 	const handleOpenPreview = (prNumber: number) => {
 		if (!projectFilter) return;
 		navigate({
-			to: "/tasks/pr/$prNumber",
+			to: "/pull-requests/$prNumber",
 			params: { prNumber: String(prNumber) },
-			search: { project: projectFilter },
+			search: {
+				search: searchQuery || undefined,
+				project: projectFilter,
+				state: includeClosed ? "all" : undefined,
+			},
 		});
 	};
 
@@ -162,15 +165,13 @@ export function PullRequestsContent({
 		<div className="@container flex flex-col h-full overflow-hidden">
 			<div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30 shrink-0">
 				<GoGitPullRequest className="size-3.5 text-muted-foreground" />
-				<span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-					Pull requests
-				</span>
-				<span className="ml-auto text-xs text-muted-foreground tabular-nums">
-					{countLabel}
+				<span className="text-xs text-muted-foreground">
+					<span className="tabular-nums">{countLabel}</span> pull requests
 				</span>
 				<Button
 					variant="ghost"
 					size="icon-xs"
+					className="ml-auto"
 					title="Refresh"
 					disabled={isFetching}
 					onClick={() => refetch()}
@@ -188,23 +189,6 @@ export function PullRequestsContent({
 					>
 						<LuMinus className="size-3.5" />
 					</Button>
-				)}
-			</div>
-
-			<div className="flex items-center gap-2 px-4 py-1.5 border-b text-xs shrink-0">
-				<Checkbox
-					id={showClosedId}
-					checked={showClosed}
-					onCheckedChange={(checked) => setShowClosed(checked === true)}
-				/>
-				<label
-					htmlFor={showClosedId}
-					className="cursor-pointer select-none text-muted-foreground"
-				>
-					Show closed / merged
-				</label>
-				{isFetching && !isInitialLoad && (
-					<span className="ml-auto text-muted-foreground">Loading…</span>
 				)}
 			</div>
 
@@ -229,7 +213,7 @@ export function PullRequestsContent({
 				) : totalCount === 0 && !isFetching && !error ? (
 					<div className="flex h-full items-center justify-center p-8">
 						<span className="text-sm text-muted-foreground">
-							{showClosed
+							{includeClosed
 								? "No pull requests found."
 								: "No open pull requests."}
 						</span>

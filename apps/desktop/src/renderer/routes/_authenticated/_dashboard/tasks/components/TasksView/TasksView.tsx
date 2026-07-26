@@ -20,16 +20,19 @@ import {
 	type SelectedIssue,
 } from "./components/GitHubIssuesContent";
 import { LinearCTA } from "./components/LinearCTA";
-import { PullRequestsContent } from "./components/PullRequestsContent";
 import { TableContent } from "./components/TableContent";
-import { type TabValue, TasksTopBar } from "./components/TasksTopBar";
+import {
+	type TabValue,
+	type TaskSource,
+	TasksTopBar,
+} from "./components/TasksTopBar";
 import type { TaskWithStatus } from "./hooks/useTasksData";
 
 interface TasksViewProps {
 	initialTab?: "all" | "active" | "backlog";
 	initialAssignee?: string;
 	initialSearch?: string;
-	initialType?: "tasks" | "prs" | "issues";
+	initialType?: "tasks" | "issues";
 	initialProject?: string;
 	initialLinearProject?: string;
 }
@@ -51,6 +54,7 @@ export function TasksView({
 	const typeTab = initialType ?? "tasks";
 	const projectFilter = initialProject ?? null;
 	const linearProjectFilter = initialLinearProject ?? null;
+	const [includeClosedIssues, setIncludeClosedIssues] = useState(false);
 
 	const {
 		setTab: storeSetTab,
@@ -70,7 +74,7 @@ export function TasksView({
 			tab?: TabValue;
 			assignee?: string | null;
 			search?: string;
-			type?: "tasks" | "prs" | "issues";
+			type?: "tasks" | "issues";
 			project?: string | null;
 			linearProject?: string | null;
 		}) =>
@@ -200,8 +204,25 @@ export function TasksView({
 		});
 	};
 
-	const handleTypeTabChange = (type: "tasks" | "prs" | "issues") => {
-		navigate({ to: "/tasks", search: buildSearch({ type }), replace: true });
+	const navigateToType = (type: TaskSource, resetSearch: boolean) => {
+		const nextSearch = resetSearch ? "" : searchQuery;
+		if (resetSearch) {
+			if (debounceRef.current) {
+				clearTimeout(debounceRef.current);
+				debounceRef.current = null;
+			}
+			setSearchQuery("");
+			storeSetSearch("");
+		}
+		navigate({
+			to: "/tasks",
+			search: buildSearch({ type, search: nextSearch }),
+			replace: true,
+		});
+	};
+
+	const handleTaskSourceChange = (source: TaskSource) => {
+		navigateToType(source, true);
 	};
 
 	const handleProjectFilterChange = (project: string) => {
@@ -258,33 +279,33 @@ export function TasksView({
 		integrations !== undefined && !isLinearConnected && typeTab === "tasks";
 
 	const showTasks = typeTab === "tasks";
-	const showPRs = typeTab === "prs";
 	const showIssues = typeTab === "issues";
+	const taskSource: TaskSource = showIssues ? "issues" : "tasks";
 
 	return (
 		<div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-			{!showLinearCTA && (
-				<TasksTopBar
-					currentTab={currentTab}
-					onTabChange={handleTabChange}
-					searchQuery={searchQuery}
-					onSearchChange={handleSearchChange}
-					assigneeFilter={assigneeFilter}
-					onAssigneeFilterChange={handleAssigneeFilterChange}
-					selectedTasks={selectedTasks}
-					onClearSelection={handleClearSelection}
-					selectedIssues={selectedIssues}
-					onClearIssueSelection={handleClearIssueSelection}
-					viewMode={viewMode}
-					onViewModeChange={setViewMode}
-					typeTab={typeTab}
-					onTypeTabChange={handleTypeTabChange}
-					projectFilter={projectFilter}
-					onProjectFilterChange={handleProjectFilterChange}
-					linearProjectFilter={linearProjectFilter}
-					onLinearProjectFilterChange={handleLinearProjectFilterChange}
-				/>
-			)}
+			<TasksTopBar
+				currentTab={currentTab}
+				onTabChange={handleTabChange}
+				searchQuery={searchQuery}
+				onSearchChange={handleSearchChange}
+				assigneeFilter={assigneeFilter}
+				onAssigneeFilterChange={handleAssigneeFilterChange}
+				selectedTasks={selectedTasks}
+				onClearSelection={handleClearSelection}
+				selectedIssues={selectedIssues}
+				onClearIssueSelection={handleClearIssueSelection}
+				viewMode={viewMode}
+				onViewModeChange={setViewMode}
+				taskSource={taskSource}
+				onTaskSourceChange={handleTaskSourceChange}
+				projectFilter={projectFilter}
+				onProjectFilterChange={handleProjectFilterChange}
+				linearProjectFilter={linearProjectFilter}
+				onLinearProjectFilterChange={handleLinearProjectFilterChange}
+				includeClosedIssues={includeClosedIssues}
+				onIncludeClosedIssuesChange={setIncludeClosedIssues}
+			/>
 
 			{showLinearCTA ? (
 				<LinearCTA />
@@ -309,16 +330,11 @@ export function TasksView({
 								onSelectionChange={handleSelectionChange}
 							/>
 						))}
-					{showPRs && (
-						<PullRequestsContent
-							projectFilter={projectFilter}
-							searchQuery={deferredSearchQuery}
-						/>
-					)}
 					{showIssues && (
 						<GitHubIssuesContent
 							projectFilter={projectFilter}
 							searchQuery={deferredSearchQuery}
+							includeClosed={includeClosedIssues}
 							onSelectionChange={handleIssueSelectionChange}
 						/>
 					)}

@@ -4,9 +4,11 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { AnimatePresence, motion } from "framer-motion";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSidebarDnd } from "../../../../hooks/useSidebarDnd";
 import { parseId } from "../../../../hooks/useSidebarDnd/useSidebarDnd";
+import { useDashboardSidebarSelection } from "../../../../providers/DashboardSidebarSelectionProvider";
 import type { DashboardSidebarProjectChild } from "../../../../types";
 import { SidebarDragOverlay } from "../../../SidebarDragOverlay";
 import { SortableSectionHeader } from "../../../SortableSectionHeader";
@@ -49,6 +51,28 @@ export function DashboardSidebarExpandedProjectContent({
 		sectionsById,
 		handlers,
 	} = useSidebarDnd({ projectId, projectChildren });
+	const { isWorkspaceSelected, selectWorkspaceFromEvent } =
+		useDashboardSidebarSelection();
+
+	const selectableWorkspaceIds = useMemo(
+		() =>
+			flatItems.flatMap((id) => {
+				const parsed = parseId(id);
+				if (!parsed || parsed.type !== "workspace") return [];
+				const workspace = workspacesById.get(parsed.realId);
+				if (
+					!workspace ||
+					workspace.type !== "worktree" ||
+					workspace.pendingTransaction?.type === "insert"
+				) {
+					return [];
+				}
+				const group = groupInfo.get(parsed.realId);
+				if (group && collapsedSectionIds.has(group.sectionId)) return [];
+				return [parsed.realId];
+			}),
+		[flatItems, workspacesById, groupInfo, collapsedSectionIds],
+	);
 
 	return (
 		<AnimatePresence initial={false}>
@@ -99,6 +123,9 @@ export function DashboardSidebarExpandedProjectContent({
 									const hidden =
 										isInCollapsedSection ||
 										(activeType === "section" && isInSection);
+									const canBulkSelect =
+										workspace.type === "worktree" &&
+										workspace.pendingTransaction?.type !== "insert";
 
 									return (
 										<AnimatePresence key={String(id)} initial={false}>
@@ -122,6 +149,21 @@ export function DashboardSidebarExpandedProjectContent({
 														shortcutLabel={workspaceShortcutLabels.get(
 															parsed.realId,
 														)}
+														isSelected={
+															canBulkSelect &&
+															isWorkspaceSelected(parsed.realId)
+														}
+														onSelectionClick={
+															canBulkSelect
+																? (event) =>
+																		selectWorkspaceFromEvent(event, {
+																			workspaceId: parsed.realId,
+																			projectId,
+																			orderedWorkspaceIds:
+																				selectableWorkspaceIds,
+																		})
+																: undefined
+														}
 														disabled={
 															workspace.type === "main" &&
 															workspace.hostType === "local-device"

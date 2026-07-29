@@ -20,9 +20,9 @@ import type {
 	DashboardSidebarProject,
 	DashboardSidebarWorkspace,
 } from "../../types";
+import { workspaceIdsForSectionMove } from "../../utils/bulkWorkspaceActions";
 import { DashboardSidebarBulkDeleteDialog } from "../DashboardSidebarBulkDeleteDialog";
 import { useDashboardSidebarSectionRename } from "../DashboardSidebarSectionRenameContext";
-import { workspaceIdsForSectionMove } from "./bulkWorkspaceActions";
 
 interface DashboardSidebarBulkActionsProps {
 	projects: DashboardSidebarProject[];

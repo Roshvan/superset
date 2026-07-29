@@ -18,6 +18,10 @@ import type { DashboardSidebarWorkspace } from "../../types";
 import { DashboardSidebarDeleteDialog } from "../DashboardSidebarDeleteDialog";
 import { DashboardSidebarCollapsedWorkspaceButton } from "./components/DashboardSidebarCollapsedWorkspaceButton";
 import { DashboardSidebarExpandedWorkspaceRow } from "./components/DashboardSidebarExpandedWorkspaceRow";
+import {
+	DashboardSidebarWorkspaceBulkContextMenu,
+	useWorkspaceRowContextMenu,
+} from "./components/DashboardSidebarWorkspaceBulkContextMenu";
 import { DashboardSidebarWorkspaceContextMenu } from "./components/DashboardSidebarWorkspaceContextMenu/DashboardSidebarWorkspaceContextMenu";
 import { useDashboardSidebarWorkspaceItemActions } from "./hooks/useDashboardSidebarWorkspaceItemActions";
 
@@ -162,14 +166,11 @@ export function DashboardSidebarWorkspaceItem({
 		},
 		[onSelectionClick],
 	);
-	const handleExpandedContextMenu = useCallback(
-		(event: MouseEvent<HTMLElement>) => {
-			if (!event.ctrlKey || !onSelectionClick) return;
-			event.preventDefault();
-			event.stopPropagation();
-		},
-		[onSelectionClick],
-	);
+	const { isBulkMenu, onRowContextMenu: handleExpandedContextMenu } =
+		useWorkspaceRowContextMenu({
+			isSelected,
+			canBulkSelect: onSelectionClick != null,
+		});
 	const handleExpandedKeyboardActivate = useCallback(
 		(event: KeyboardEvent<HTMLElement>) => {
 			if (onSelectionClick?.(event)) return;
@@ -177,7 +178,6 @@ export function DashboardSidebarWorkspaceItem({
 		},
 		[handleClick, onSelectionClick],
 	);
-
 	if (isCollapsed) {
 		const content = (
 			// biome-ignore lint/a11y/noStaticElementInteractions: hover handlers drive a non-interactive popover, no new keyboard semantics
@@ -309,6 +309,10 @@ export function DashboardSidebarWorkspaceItem({
 			<div hidden={isDeleting}>
 				{isPending ? (
 					expandedContent
+				) : isBulkMenu ? (
+					<DashboardSidebarWorkspaceBulkContextMenu>
+						{expandedContent}
+					</DashboardSidebarWorkspaceBulkContextMenu>
 				) : (
 					<DashboardSidebarWorkspaceContextMenu
 						workspaceId={id}

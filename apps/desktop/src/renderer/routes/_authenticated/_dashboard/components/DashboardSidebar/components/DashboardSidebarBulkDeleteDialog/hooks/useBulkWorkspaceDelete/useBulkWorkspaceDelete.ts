@@ -135,7 +135,7 @@ export function useBulkWorkspaceDelete({
 			setCompletedCount(0);
 
 			const targetIds = new Set(targets.map((workspace) => workspace.id));
-			const deletedIds: string[] = [];
+			let deletedIds: string[] = [];
 			let selectionReconciled = false;
 			try {
 				for (const workspace of targets) markDeleting(workspace.id);
@@ -168,9 +168,9 @@ export function useBulkWorkspaceDelete({
 						}),
 					onSettled: () => setCompletedCount((count) => count + 1),
 				});
+				deletedIds = execution.successes.map(({ workspace }) => workspace.id);
 
 				for (const { workspace, result } of execution.successes) {
-					deletedIds.push(workspace.id);
 					hostWorkspacesCache.removeWorkspace(workspace.hostId, workspace.id);
 					removeWorkspaceFromSidebar(workspace.id);
 					warnings.push(...result.warnings);

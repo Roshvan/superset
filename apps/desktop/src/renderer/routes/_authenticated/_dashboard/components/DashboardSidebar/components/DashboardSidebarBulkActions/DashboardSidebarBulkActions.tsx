@@ -14,15 +14,13 @@ import {
 	LuUngroup,
 	LuX,
 } from "react-icons/lu";
-import { useDashboardSidebarState } from "renderer/routes/_authenticated/hooks/useDashboardSidebarState";
+import { useBulkWorkspaceMoveActions } from "../../hooks/useBulkWorkspaceMoveActions";
 import { useDashboardSidebarSelection } from "../../providers/DashboardSidebarSelectionProvider";
 import type {
 	DashboardSidebarProject,
 	DashboardSidebarWorkspace,
 } from "../../types";
-import { workspaceIdsForSectionMove } from "../../utils/bulkWorkspaceActions";
 import { DashboardSidebarBulkDeleteDialog } from "../DashboardSidebarBulkDeleteDialog";
-import { useDashboardSidebarSectionRename } from "../DashboardSidebarSectionRenameContext";
 
 interface DashboardSidebarBulkActionsProps {
 	projects: DashboardSidebarProject[];
@@ -33,14 +31,8 @@ export function DashboardSidebarBulkActions({
 	projects,
 	children,
 }: DashboardSidebarBulkActionsProps) {
-	const {
-		clearSelection,
-		removeSelectedWorkspaces,
-		selectedProjectId,
-		selectedWorkspaceIds,
-	} = useDashboardSidebarSelection();
-	const { createSection, moveWorkspaceToSection } = useDashboardSidebarState();
-	const { requestSectionRename } = useDashboardSidebarSectionRename();
+	const { clearSelection, removeSelectedWorkspaces, selectedProjectId } =
+		useDashboardSidebarSelection();
 	const [deleteTargets, setDeleteTargets] = useState<
 		DashboardSidebarWorkspace[]
 	>([]);
@@ -50,19 +42,9 @@ export function DashboardSidebarBulkActions({
 		() => projects.find((project) => project.id === selectedProjectId) ?? null,
 		[projects, selectedProjectId],
 	);
-	const {
-		sections,
-		selectedWorkspaces,
-		groupedWorkspaceIds,
-		sectionByWorkspaceId,
-	} = useMemo(() => {
+	const { workspacesById, sectionIdByWorkspaceId } = useMemo(() => {
 		const workspaceById = new Map<string, DashboardSidebarWorkspace>();
 		const sectionByWorkspaceId = new Map<string, string>();
-		const projectSections: Array<{
-			id: string;
-			name: string;
-			color: string | null;
-		}> = [];
 
 		for (const child of selectedProject?.children ?? []) {
 			if (child.type === "workspace") {
@@ -70,11 +52,6 @@ export function DashboardSidebarBulkActions({
 				continue;
 			}
 
-			projectSections.push({
-				id: child.section.id,
-				name: child.section.name,
-				color: child.section.color,
-			});
 			for (const workspace of child.section.workspaces) {
 				workspaceById.set(workspace.id, workspace);
 				sectionByWorkspaceId.set(workspace.id, child.section.id);
@@ -82,47 +59,23 @@ export function DashboardSidebarBulkActions({
 		}
 
 		return {
-			sections: projectSections,
-			selectedWorkspaces: selectedWorkspaceIds.flatMap((id) => {
-				const workspace = workspaceById.get(id);
-				return workspace ? [workspace] : [];
-			}),
-			groupedWorkspaceIds: selectedWorkspaceIds.filter((id) =>
-				sectionByWorkspaceId.has(id),
-			),
-			sectionByWorkspaceId,
+			workspacesById: workspaceById,
+			sectionIdByWorkspaceId: sectionByWorkspaceId,
 		};
-	}, [selectedProject, selectedWorkspaceIds]);
-
-	const moveSelectionToSection = (sectionId: string) => {
-		if (!selectedProjectId) return;
-		for (const workspaceId of workspaceIdsForSectionMove(
-			selectedWorkspaceIds,
-			sectionByWorkspaceId,
-			sectionId,
-		)) {
-			moveWorkspaceToSection(workspaceId, selectedProjectId, sectionId);
-		}
-		clearSelection();
-	};
-
-	const createGroupFromSelection = () => {
-		if (!selectedProjectId) return;
-		const sectionId = createSection(selectedProjectId);
-		for (const workspace of selectedWorkspaces) {
-			moveWorkspaceToSection(workspace.id, selectedProjectId, sectionId);
-		}
-		clearSelection();
-		requestSectionRename(sectionId);
-	};
-
-	const ungroupSelection = () => {
-		if (!selectedProjectId) return;
-		for (const workspaceId of groupedWorkspaceIds) {
-			moveWorkspaceToSection(workspaceId, selectedProjectId, null);
-		}
-		clearSelection();
-	};
+	}, [selectedProject]);
+	const {
+		createGroupFromSelection,
+		groupedWorkspaceIds,
+		moveSelectionToSection,
+		sectionMenuState,
+		sections,
+		selectedWorkspaces,
+		ungroupSelection,
+	} = useBulkWorkspaceMoveActions({
+		projectId: selectedProjectId,
+		workspacesById,
+		sectionIdByWorkspaceId,
+	});
 
 	const openDeleteDialog = () => {
 		setDeleteTargets(selectedWorkspaces);
@@ -180,8 +133,8 @@ export function DashboardSidebarBulkActions({
 								<LuFolderPlus className="size-4" />
 								New group
 							</DropdownMenuItem>
-							{sections.length > 0 && <DropdownMenuSeparator />}
-							{sections.map((section) => (
+							{sectionMenuState === "populated" && <DropdownMenuSeparator />}
+							{sections?.map((section) => (
 								<DropdownMenuItem
 									key={section.id}
 									onSelect={() => moveSelectionToSection(section.id)}
@@ -197,6 +150,13 @@ export function DashboardSidebarBulkActions({
 									<span className="truncate">{section.name}</span>
 								</DropdownMenuItem>
 							))}
+							{sectionMenuState !== "populated" && (
+								<DropdownMenuItem disabled>
+									{sectionMenuState === "empty"
+										? "No groups yet"
+										: "Loading groups…"}
+								</DropdownMenuItem>
+							)}
 						</DropdownMenuContent>
 					</DropdownMenu>
 

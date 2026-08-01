@@ -1,6 +1,6 @@
 import { type MouseEvent, useCallback } from "react";
 import { useDashboardSidebarSelection } from "../../../../providers/DashboardSidebarSelectionProvider";
-import { useWorkspaceBulkMenuScope } from "./WorkspaceBulkMenuScope";
+import { useWorkspaceBulkMenuScope } from "../WorkspaceBulkMenuScope";
 import { resolveWorkspaceRowContextMenu } from "./workspaceRowContextMenu";
 
 /**

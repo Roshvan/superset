@@ -10,7 +10,7 @@ import { useSidebarDnd } from "../../../../hooks/useSidebarDnd";
 import { parseId } from "../../../../hooks/useSidebarDnd/useSidebarDnd";
 import { useDashboardSidebarSelection } from "../../../../providers/DashboardSidebarSelectionProvider";
 import type { DashboardSidebarProjectChild } from "../../../../types";
-import { WorkspaceBulkMenuScope } from "../../../DashboardSidebarWorkspaceItem/components/DashboardSidebarWorkspaceBulkContextMenu";
+import { WorkspaceBulkMenuScope } from "../../../DashboardSidebarWorkspaceItem/components/WorkspaceBulkMenuScope";
 import { SidebarDragOverlay } from "../../../SidebarDragOverlay";
 import { SortableSectionHeader } from "../../../SortableSectionHeader";
 import { SortableWorkspaceItem } from "../../../SortableWorkspaceItem";

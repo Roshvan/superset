@@ -50,7 +50,7 @@ interface DashboardSidebarExpandedWorkspaceRowProps
 	pinnedContext?: { projectName: string; projectIconUrl: string | null };
 	onClick?: MouseEventHandler<HTMLDivElement>;
 	onKeyboardActivate?: KeyboardEventHandler<HTMLDivElement>;
-	onWorkspaceChipsClick?: () => void;
+	onWorkspaceChipsClick?: MouseEventHandler<HTMLDivElement>;
 	onDoubleClick?: () => void;
 	onCloseWorkspaceClick: () => void;
 	onRemoveFromSidebarClick: () => void;

@@ -6,7 +6,7 @@ import {
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo } from "react";
 import {
 	LuFolderInput,
 	LuFolderPlus,
@@ -14,6 +14,7 @@ import {
 	LuUngroup,
 	LuX,
 } from "react-icons/lu";
+import { useBulkWorkspaceDeleteDialog } from "../../hooks/useBulkWorkspaceDeleteDialog";
 import { useBulkWorkspaceMoveActions } from "../../hooks/useBulkWorkspaceMoveActions";
 import { useDashboardSidebarSelection } from "../../providers/DashboardSidebarSelectionProvider";
 import type {
@@ -33,11 +34,6 @@ export function DashboardSidebarBulkActions({
 }: DashboardSidebarBulkActionsProps) {
 	const { clearSelection, removeSelectedWorkspaces, selectedProjectId } =
 		useDashboardSidebarSelection();
-	const [deleteTargets, setDeleteTargets] = useState<
-		DashboardSidebarWorkspace[]
-	>([]);
-	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-
 	const selectedProject = useMemo(
 		() => projects.find((project) => project.id === selectedProjectId) ?? null,
 		[projects, selectedProjectId],
@@ -77,10 +73,10 @@ export function DashboardSidebarBulkActions({
 		sectionIdByWorkspaceId,
 	});
 
-	const openDeleteDialog = () => {
-		setDeleteTargets(selectedWorkspaces);
-		setIsDeleteDialogOpen(true);
-	};
+	const { deleteDialogProps, openDeleteDialog } = useBulkWorkspaceDeleteDialog({
+		selectedWorkspaces,
+		onDeleted: removeSelectedWorkspaces,
+	});
 
 	return (
 		<>
@@ -191,15 +187,7 @@ export function DashboardSidebarBulkActions({
 				</div>
 			)}
 
-			<DashboardSidebarBulkDeleteDialog
-				workspaces={deleteTargets}
-				open={isDeleteDialogOpen}
-				onOpenChange={(open) => {
-					setIsDeleteDialogOpen(open);
-					if (!open) setDeleteTargets([]);
-				}}
-				onDeleted={removeSelectedWorkspaces}
-			/>
+			<DashboardSidebarBulkDeleteDialog {...deleteDialogProps} />
 		</>
 	);
 }

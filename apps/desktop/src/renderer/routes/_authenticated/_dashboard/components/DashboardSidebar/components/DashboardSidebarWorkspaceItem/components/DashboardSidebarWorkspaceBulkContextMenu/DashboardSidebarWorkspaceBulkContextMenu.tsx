@@ -8,7 +8,7 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@superset/ui/context-menu";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import {
 	LuArrowRightLeft,
 	LuArrowUp,
@@ -16,10 +16,10 @@ import {
 	LuTrash2,
 	LuX,
 } from "react-icons/lu";
+import { useBulkWorkspaceDeleteDialog } from "../../../../hooks/useBulkWorkspaceDeleteDialog";
 import { useBulkWorkspaceMoveActions } from "../../../../hooks/useBulkWorkspaceMoveActions";
 import { useDashboardSidebarHover } from "../../../../providers/DashboardSidebarHoverProvider";
 import { useDashboardSidebarSelection } from "../../../../providers/DashboardSidebarSelectionProvider";
-import type { DashboardSidebarWorkspace } from "../../../../types";
 import { DashboardSidebarBulkDeleteDialog } from "../../../DashboardSidebarBulkDeleteDialog";
 import { useWorkspaceBulkMenuScope } from "../WorkspaceBulkMenuScope";
 
@@ -34,10 +34,6 @@ export function DashboardSidebarWorkspaceBulkContextMenu({
 	const { setContextMenuOpen } = useDashboardSidebarHover();
 	const { clearSelection, removeSelectedWorkspaces } =
 		useDashboardSidebarSelection();
-	const [deleteTargets, setDeleteTargets] = useState<
-		DashboardSidebarWorkspace[]
-	>([]);
-	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const {
 		createGroupFromSelection,
 		groupedWorkspaceIds,
@@ -50,6 +46,10 @@ export function DashboardSidebarWorkspaceBulkContextMenu({
 		projectId: scope?.projectId ?? null,
 		workspacesById: scope?.workspacesById ?? new Map(),
 		sectionIdByWorkspaceId: scope?.sectionIdByWorkspaceId ?? new Map(),
+	});
+	const { deleteDialogProps, openDeleteDialog } = useBulkWorkspaceDeleteDialog({
+		selectedWorkspaces,
+		onDeleted: removeSelectedWorkspaces,
 	});
 
 	if (!scope) return children;
@@ -106,10 +106,7 @@ export function DashboardSidebarWorkspaceBulkContextMenu({
 					)}
 					<ContextMenuSeparator />
 					<ContextMenuItem
-						onSelect={() => {
-							setDeleteTargets(selectedWorkspaces);
-							setIsDeleteDialogOpen(true);
-						}}
+						onSelect={openDeleteDialog}
 						className="text-destructive focus:text-destructive"
 					>
 						<LuTrash2 className="size-4 mr-2 text-destructive" />
@@ -123,15 +120,7 @@ export function DashboardSidebarWorkspaceBulkContextMenu({
 				</ContextMenuContent>
 			</ContextMenu>
 
-			<DashboardSidebarBulkDeleteDialog
-				workspaces={deleteTargets}
-				open={isDeleteDialogOpen}
-				onOpenChange={(open) => {
-					setIsDeleteDialogOpen(open);
-					if (!open) setDeleteTargets([]);
-				}}
-				onDeleted={removeSelectedWorkspaces}
-			/>
+			<DashboardSidebarBulkDeleteDialog {...deleteDialogProps} />
 		</>
 	);
 }

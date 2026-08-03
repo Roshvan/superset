@@ -14,12 +14,13 @@ export function EditableTitle({ value, onSave }: EditableTitleProps) {
 		setLocalValue(value);
 	}, [value]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-measure height whenever the rendered text changes
 	useLayoutEffect(() => {
 		const input = inputRef.current;
 		if (!input) return;
 		input.style.height = "auto";
 		input.style.height = `${input.scrollHeight}px`;
-	}, []);
+	}, [localValue]);
 
 	const handleBlur = () => {
 		const trimmed = localValue.trim();

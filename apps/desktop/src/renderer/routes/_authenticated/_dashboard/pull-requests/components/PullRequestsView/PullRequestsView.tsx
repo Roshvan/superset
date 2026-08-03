@@ -21,14 +21,13 @@ export function PullRequestsView({
 }: PullRequestsViewProps) {
 	const navigate = useNavigate();
 	const {
-		search: storedSearch,
 		projectFilter: storedProjectFilter,
 		includeClosed: storedIncludeClosed,
 		setSearch: storeSetSearch,
 		setProjectFilter: storeSetProjectFilter,
 		setIncludeClosed: storeSetIncludeClosed,
 	} = usePullRequestsFilterStore();
-	const [searchQuery, setSearchQuery] = useState(initialSearch ?? storedSearch);
+	const [searchQuery, setSearchQuery] = useState(initialSearch ?? "");
 	const projectFilter = initialProject ?? storedProjectFilter;
 	const includeClosed =
 		initialState === undefined ? storedIncludeClosed : initialState === "all";

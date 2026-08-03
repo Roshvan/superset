@@ -39,6 +39,8 @@ export function PullRequestsTopBar({
 						onChange={onIncludeClosedChange}
 					/>
 				</div>
+				{/* Window-drag leaf standing in for the hidden TopBar. */}
+				<div className="drag hidden min-w-0 flex-1 self-stretch @4xl:block" />
 				<div className="shrink-0">
 					<WorkItemsSearch
 						value={searchQuery}

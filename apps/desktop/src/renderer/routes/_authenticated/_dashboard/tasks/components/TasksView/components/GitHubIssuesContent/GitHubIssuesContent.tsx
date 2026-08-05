@@ -12,6 +12,10 @@ import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboa
 import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import {
+	combineQueryResults,
+	mergePaginatedProjectRows,
+} from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
+import {
 	type LinkedIssue,
 	useNewWorkspaceDraftStore,
 } from "renderer/stores/new-workspace-draft";
@@ -54,7 +58,9 @@ export function GitHubIssuesContent({
 	const [selectedIssues, setSelectedIssues] = useState<
 		Map<string, SelectedIssue>
 	>(new Map());
-	const [pageCount, setPageCount] = useState(1);
+	const [pageCountByProject, setPageCountByProject] = useState<
+		Record<string, number>
+	>({});
 	const debouncedQuery = useDebouncedValue(searchQuery, 300);
 	const navigate = useNavigate();
 	const updateDraft = useNewWorkspaceDraftStore((s) => s.updateDraft);
@@ -63,13 +69,14 @@ export function GitHubIssuesContent({
 
 	const queryTargets = useMemo(
 		() =>
-			projectTargets.flatMap((target) =>
-				Array.from({ length: pageCount }, (_, index) => ({
+			projectTargets.flatMap((target) => {
+				const pageCount = pageCountByProject[target.projectId] ?? 1;
+				return Array.from({ length: pageCount }, (_, index) => ({
 					target,
 					page: index + 1,
-				})),
-			),
-		[pageCount, projectTargets],
+				}));
+			}),
+		[pageCountByProject, projectTargets],
 	);
 	const queries = useQueries({
 		queries: queryTargets.map(({ target, page }) => ({
@@ -98,32 +105,46 @@ export function GitHubIssuesContent({
 			gcTime: 10 * 60_000,
 			retry: false,
 		})),
+		combine: combineQueryResults,
 	});
 	const isFetching = queries.some((query) => query.isFetching);
 	const error = queries.find((query) => query.error)?.error;
 	const refetch = () => Promise.all(queries.map((query) => query.refetch()));
-	const isFetchingNextPage = queries.some(
-		(query, index) =>
-			queryTargets[index]?.page === pageCount && query.isFetching,
+	const latestProjectQueries = projectTargets.map((target) => {
+		const page = pageCountByProject[target.projectId] ?? 1;
+		const index = queryTargets.findIndex(
+			(queryTarget) =>
+				queryTarget.target.projectId === target.projectId &&
+				queryTarget.page === page,
+		);
+		return { target, page, query: queries[index] };
+	});
+	const isFetchingNextPage = latestProjectQueries.some(
+		({ page, query }) => page > 1 && query?.isFetching,
 	);
-	const hasNextPage = queries.some(
-		(query, index) =>
-			queryTargets[index]?.page === pageCount && query.data?.hasNextPage,
+	const expandableProjectIds = latestProjectQueries.flatMap(
+		({ target, query }) => (query?.data?.hasNextPage ? [target.projectId] : []),
 	);
+	const hasNextPage = expandableProjectIds.length > 0;
 
 	const issues = useMemo(
 		() =>
-			queries
-				.flatMap((query, index) => {
+			mergePaginatedProjectRows({
+				pages: queries.map((query, index) => {
 					const target = queryTargets[index]?.target;
-					if (!target || !query.data) return [];
-					return query.data.issues.map((issue) => ({ ...issue, ...target }));
-				})
-				.sort(
-					(a, b) =>
-						(Date.parse(b.updatedAt ?? "") || 0) -
-						(Date.parse(a.updatedAt ?? "") || 0),
-				),
+					const page = queryTargets[index]?.page ?? 1;
+					return {
+						page,
+						isPending: query.isFetching && !query.data && !query.error,
+						rows:
+							target && query.data
+								? query.data.issues.map((issue) => ({ ...issue, ...target }))
+								: [],
+					};
+				}),
+				getKey: (issue) => `${issue.projectId}:${issue.issueNumber}`,
+				getUpdatedAt: (issue) => issue.updatedAt,
+			}),
 		[queries, queryTargets],
 	);
 	const totalCount = queries.reduce((total, query, index) => {
@@ -146,17 +167,24 @@ export function GitHubIssuesContent({
 		if (!el || !root || !hasNextPage || isFetchingNextPage) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0]?.isIntersecting) setPageCount((count) => count + 1);
+				if (!entries[0]?.isIntersecting) return;
+				setPageCountByProject((current) => {
+					const next = { ...current };
+					for (const projectId of expandableProjectIds) {
+						next[projectId] = (current[projectId] ?? 1) + 1;
+					}
+					return next;
+				});
 			},
 			{ root, rootMargin: "200px" },
 		);
 		observer.observe(el);
 		return () => observer.disconnect();
-	}, [hasNextPage, isFetchingNextPage]);
+	}, [expandableProjectIds, hasNextPage, isFetchingNextPage]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: restart pagination whenever the active query changes
 	useEffect(() => {
-		setPageCount(1);
+		setPageCountByProject({});
 	}, [debouncedQuery, includeClosed, projectTargets]);
 
 	const clearSelection = useCallback(() => {
@@ -304,7 +332,7 @@ export function GitHubIssuesContent({
 			</div>
 
 			<div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-				{error instanceof Error ? (
+				{error instanceof Error && issues.length === 0 ? (
 					<div className="flex flex-col items-start gap-3 px-4 py-4 text-sm text-destructive select-text cursor-text">
 						<span>{error.message}</span>
 						<Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -328,6 +356,16 @@ export function GitHubIssuesContent({
 					</div>
 				) : (
 					<div className="flex flex-col">
+						{error instanceof Error && (
+							<div className="flex items-center gap-2 border-b border-border/50 bg-destructive/5 px-4 py-2 text-xs text-destructive">
+								<span className="min-w-0 flex-1 truncate">
+									Some repositories could not be loaded: {error.message}
+								</span>
+								<Button variant="outline" size="xs" onClick={() => refetch()}>
+									Retry
+								</Button>
+							</div>
+						)}
 						{issues.map((issue) => {
 							const isClosed = issue.state.toLowerCase() === "closed";
 							const StateIcon = isClosed ? GoIssueClosed : GoIssueOpened;

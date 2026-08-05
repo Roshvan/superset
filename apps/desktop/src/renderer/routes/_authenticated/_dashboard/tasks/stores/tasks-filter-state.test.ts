@@ -97,4 +97,14 @@ describe("migrateTasksFilterState", () => {
 			projectFilters: [],
 		});
 	});
+
+	test("normalizes a persisted Linear project filter", () => {
+		expect(
+			migrateTasksFilterState({
+				linearProjectFilter: "  linear-project-1  ",
+			}),
+		).toMatchObject({
+			linearProjectFilter: "linear-project-1",
+		});
+	});
 });

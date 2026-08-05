@@ -78,7 +78,7 @@ export function migrateTasksFilterState(
 		linearProjectFilter:
 			typeof state.linearProjectFilter === "string" &&
 			state.linearProjectFilter.trim().length > 0
-				? state.linearProjectFilter
+				? state.linearProjectFilter.trim()
 				: null,
 	};
 }

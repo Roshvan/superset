@@ -553,6 +553,12 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(ghCalls[1].args.slice(0, 2)).toEqual(["api", "graphql"]);
 		expect(ghCalls[1].args.join(" ")).toContain("pullRequest(number:101)");
 		expect(ghCalls[1].args.join(" ")).not.toContain("pullRequest(number:999)");
+		expect(ghCalls[1].args).toContain("owner=octocat");
+		expect(ghCalls[1].args).toContain("name=hello");
+		for (const variable of ["owner=octocat", "name=hello"]) {
+			const variableIndex = ghCalls[1].args.indexOf(variable);
+			expect(ghCalls[1].args[variableIndex - 1]).toBe("-f");
+		}
 		expect(result.pullRequests[0].checksStatus).toBe("success");
 	});
 

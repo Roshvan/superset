@@ -24,10 +24,10 @@ export function migratePullRequestsFilterState(
 	const legacyProject =
 		typeof state.projectFilter === "string" ? state.projectFilter : null;
 	return {
-		...state,
 		projectFilters: normalizeProjectFilters(
 			state.projectFilters ?? (legacyProject ? [legacyProject] : []),
 		),
+		includeClosed: state.includeClosed === true,
 	} as unknown as PullRequestsFilterState;
 }
 

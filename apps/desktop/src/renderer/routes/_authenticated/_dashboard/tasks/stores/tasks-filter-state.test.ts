@@ -73,9 +73,28 @@ describe("migrateTasksFilterState", () => {
 	});
 
 	test("survives corrupt persisted values", () => {
-		expect(migrateTasksFilterState(null)).toMatchObject({
+		expect(
+			migrateTasksFilterState({
+				tab: "waiting",
+				viewMode: "grid",
+				linearProjectFilter: 42,
+				projectFilters: ["project-1", false, "project-1"],
+			}),
+		).toMatchObject({
+			tab: "all",
 			typeTab: "tasks",
+			viewMode: "table",
 			includeClosedIssues: false,
+			linearProjectFilter: null,
+			projectFilters: ["project-1"],
+		});
+		expect(migrateTasksFilterState(null)).toMatchObject({
+			tab: "all",
+			typeTab: "tasks",
+			viewMode: "table",
+			includeClosedIssues: false,
+			linearProjectFilter: null,
+			projectFilters: [],
 		});
 	});
 });

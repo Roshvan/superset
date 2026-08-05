@@ -37,9 +37,19 @@ describe("migratePullRequestsFilterState", () => {
 		).toMatchObject({ projectFilters: ["project-1"] });
 	});
 
-	test("defaults corrupt state to all repositories", () => {
+	test("defaults corrupt persisted values safely", () => {
+		expect(
+			migratePullRequestsFilterState({
+				projectFilters: ["project-1", 42, "project-1"],
+				includeClosed: "true",
+			}),
+		).toMatchObject({
+			projectFilters: ["project-1"],
+			includeClosed: false,
+		});
 		expect(migratePullRequestsFilterState(null)).toMatchObject({
 			projectFilters: [],
+			includeClosed: false,
 		});
 	});
 });

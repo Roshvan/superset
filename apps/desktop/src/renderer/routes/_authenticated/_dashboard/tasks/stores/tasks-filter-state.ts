@@ -16,6 +16,20 @@ export type FilterTab =
 	| "completed"
 	| "canceled";
 
+const FILTER_TABS = new Set<unknown>([
+	"all",
+	"active",
+	"backlog",
+	"unstarted",
+	"started",
+	"completed",
+	"canceled",
+]);
+
+function isFilterTab(value: unknown): value is FilterTab {
+	return FILTER_TABS.has(value);
+}
+
 interface TasksFilterState {
 	tab: FilterTab;
 	assignee: string | null;
@@ -43,13 +57,19 @@ export function migrateTasksFilterState(
 			? (persistedState as Record<string, unknown>)
 			: {};
 	return {
-		...state,
+		tab: isFilterTab(state.tab) ? state.tab : "all",
 		typeTab: state.typeTab === "issues" ? "issues" : "tasks",
+		viewMode: state.viewMode === "board" ? "board" : "table",
 		includeClosedIssues: state.includeClosedIssues === true,
 		projectFilters: normalizeProjectFilters(
 			state.projectFilters ??
 				(typeof state.projectFilter === "string" ? [state.projectFilter] : []),
 		),
+		linearProjectFilter:
+			typeof state.linearProjectFilter === "string" &&
+			state.linearProjectFilter.trim().length > 0
+				? state.linearProjectFilter
+				: null,
 	} as unknown as TasksFilterState;
 }
 

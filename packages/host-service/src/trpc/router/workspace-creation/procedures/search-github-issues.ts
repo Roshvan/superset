@@ -14,6 +14,7 @@ interface IssueResult {
 	url: string;
 	state: string;
 	authorLogin: string | null;
+	updatedAt: string | null;
 }
 
 export interface IssuesPage {
@@ -30,9 +31,10 @@ const ghIssueViewSchema = z.object({
 	url: z.string(),
 	state: z.string(),
 	author: z.object({ login: z.string() }).nullable().optional(),
+	updatedAt: z.string().nullable().optional(),
 });
 
-const ISSUE_VIEW_FIELDS = "number,title,url,state,author";
+const ISSUE_VIEW_FIELDS = "number,title,url,state,author,updatedAt";
 
 async function ghDirectLookup(
 	execGh: ExecGh,
@@ -58,6 +60,7 @@ async function ghDirectLookup(
 		url: issue.url,
 		state: issue.state.toLowerCase(),
 		authorLogin: issue.author?.login ?? null,
+		updatedAt: issue.updatedAt ?? null,
 	};
 }
 
@@ -68,6 +71,7 @@ const searchIssuesItemSchema = z.object({
 	state: z.string(),
 	user: z.object({ login: z.string() }).nullable().optional(),
 	pull_request: z.unknown().optional(),
+	updated_at: z.string().optional(),
 });
 
 const searchIssuesResponseSchema = z.object({
@@ -116,6 +120,7 @@ async function ghApiSearchIssues(
 			url: item.html_url,
 			state: item.state.toLowerCase(),
 			authorLogin: item.user?.login ?? null,
+			updatedAt: item.updated_at ?? null,
 		}));
 	const hasNextPage = page * perPage < parsed.total_count;
 	return { items, totalCount: parsed.total_count, hasNextPage };
@@ -213,6 +218,7 @@ export const searchGitHubIssues = protectedProcedure
 							url: issue.html_url,
 							state: issue.state,
 							authorLogin: issue.user?.login ?? null,
+							updatedAt: issue.updated_at ?? null,
 						},
 					],
 					totalCount: 1,
@@ -239,6 +245,7 @@ export const searchGitHubIssues = protectedProcedure
 					url: item.html_url,
 					state: item.state,
 					authorLogin: item.user?.login ?? null,
+					updatedAt: item.updated_at ?? null,
 				}));
 			const hasNextPage = page * limit < data.total_count;
 			return {

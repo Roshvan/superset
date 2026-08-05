@@ -21,9 +21,13 @@ export function useProjectQueryTargets(projectFilters: string[]) {
 	}, [projectFilters, projects]);
 	const selectedHostIds = useMemo(
 		() =>
-			selectedProjects
-				.map((project) => selectServingHostId(project.hostIds, machineId))
-				.filter((hostId): hostId is string => hostId !== null),
+			Array.from(
+				new Set(
+					selectedProjects
+						.map((project) => selectServingHostId(project.hostIds, machineId))
+						.filter((hostId): hostId is string => hostId !== null),
+				),
+			),
 		[selectedProjects, machineId],
 	);
 	const hostUrls = useHostUrls(selectedHostIds);

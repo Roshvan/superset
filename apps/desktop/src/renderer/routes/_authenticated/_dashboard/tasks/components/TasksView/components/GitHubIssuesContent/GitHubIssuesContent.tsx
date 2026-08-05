@@ -10,6 +10,7 @@ import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import {
 	type LinkedIssue,
 	useNewWorkspaceDraftStore,
@@ -112,11 +113,17 @@ export function GitHubIssuesContent({
 
 	const issues = useMemo(
 		() =>
-			queries.flatMap((query, index) => {
-				const target = queryTargets[index]?.target;
-				if (!target || !query.data) return [];
-				return query.data.issues.map((issue) => ({ ...issue, ...target }));
-			}),
+			queries
+				.flatMap((query, index) => {
+					const target = queryTargets[index]?.target;
+					if (!target || !query.data) return [];
+					return query.data.issues.map((issue) => ({ ...issue, ...target }));
+				})
+				.sort(
+					(a, b) =>
+						(Date.parse(b.updatedAt ?? "") || 0) -
+						(Date.parse(a.updatedAt ?? "") || 0),
+				),
 		[queries, queryTargets],
 	);
 	const totalCount = queries.reduce((total, query, index) => {
@@ -124,10 +131,12 @@ export function GitHubIssuesContent({
 			? total + (query.data?.totalCount ?? 0)
 			: total;
 	}, 0);
-	const repoMismatch = useMemo(() => {
-		const mismatch = queries.find((query) => query.data?.repoMismatch)?.data;
-		return mismatch?.repoMismatch ?? null;
-	}, [queries]);
+	const repoMismatch = getRepositoryMismatchLabel(
+		queries.flatMap((query, index) =>
+			queryTargets[index]?.target.hostUrl ? [query.data] : [],
+		),
+		issues.length,
+	);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);

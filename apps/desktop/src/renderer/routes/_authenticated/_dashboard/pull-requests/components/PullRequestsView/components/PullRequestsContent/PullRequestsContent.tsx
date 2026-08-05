@@ -9,6 +9,7 @@ import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import {
 	normalizePRState,
 	PRIcon,
@@ -111,7 +112,8 @@ export function PullRequestsContent({
 				})
 				.sort(
 					(a, b) =>
-						Date.parse(b.updatedAt ?? "") - Date.parse(a.updatedAt ?? ""),
+						(Date.parse(b.updatedAt ?? "") || 0) -
+						(Date.parse(a.updatedAt ?? "") || 0),
 				),
 		[queries, queryTargets],
 	);
@@ -120,10 +122,12 @@ export function PullRequestsContent({
 			? total + (query.data?.totalCount ?? 0)
 			: total;
 	}, 0);
-	const repoMismatch = useMemo(() => {
-		const mismatch = queries.find((query) => query.data?.repoMismatch)?.data;
-		return mismatch?.repoMismatch ?? null;
-	}, [queries]);
+	const repoMismatch = getRepositoryMismatchLabel(
+		queries.flatMap((query, index) =>
+			queryTargets[index]?.target.hostUrl ? [query.data] : [],
+		),
+		pullRequests.length,
+	);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);

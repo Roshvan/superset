@@ -493,6 +493,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 						html_url: "https://github.com/octocat/hello/issues/7",
 						state: "open",
 						user: { login: "dave" },
+						updated_at: "2026-08-05T11:00:00Z",
 					},
 				],
 			};
@@ -607,6 +608,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		});
 		expect(result.issues).toHaveLength(1);
 		expect(result.issues[0].issueNumber).toBe(7);
+		expect(result.issues[0].updatedAt).toBe("2026-08-05T11:00:00Z");
 		expect(result.totalCount).toBe(1);
 		expect(result.hasNextPage).toBe(false);
 		expect(ghCalls).toHaveLength(1);

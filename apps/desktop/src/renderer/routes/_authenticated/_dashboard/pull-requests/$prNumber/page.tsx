@@ -5,10 +5,11 @@ import { useMemo } from "react";
 import { MarkdownRenderer } from "renderer/components/MarkdownRenderer";
 import { useHostUrl } from "renderer/hooks/host-service/useHostTargetUrl";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
-import { parseProjectFilterParam } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import { resolveProjectFilterParams } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { WorkItemDetailHeader } from "renderer/routes/_authenticated/_dashboard/components/WorkItemDetailHeader";
 import { WorkItemDetailState } from "renderer/routes/_authenticated/_dashboard/components/WorkItemDetailState";
 import { useProjectHost } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectHost";
+import { PullRequestChecksSection } from "renderer/routes/_authenticated/_dashboard/pull-requests/components/PullRequestChecksSection";
 import { parsePositiveIntegerParam } from "renderer/routes/_authenticated/_dashboard/utils/parsePositiveIntegerParam";
 import {
 	normalizePRState,
@@ -19,7 +20,6 @@ import {
 	useNewWorkspaceDraftStore,
 } from "renderer/stores/new-workspace-draft";
 import { useOpenNewWorkspaceModal } from "renderer/stores/new-workspace-modal";
-import { PullRequestChecksSection } from "../components/PullRequestChecksSection";
 import { Route as PullRequestsLayoutRoute } from "../layout";
 import { pullRequestsSearchFromFilters } from "../stores/pullRequestsFilterStore";
 
@@ -49,12 +49,11 @@ function PullRequestDetailPage() {
 		() =>
 			pullRequestsSearchFromFilters({
 				search: search.search ?? "",
-				projectFilters:
-					search.projects !== undefined
-						? parseProjectFilterParam(search.projects)
-						: projectId
-							? [projectId]
-							: [],
+				projectFilters: resolveProjectFilterParams(
+					search.projects,
+					projectId,
+					[],
+				),
 				includeClosed: search.state === "all",
 			}),
 		[projectId, search.projects, search.search, search.state],

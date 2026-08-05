@@ -124,11 +124,17 @@ export function TasksView({
 			includeClosedIssues,
 		],
 	);
+	const cancelPendingSearchNavigation = useCallback(() => {
+		if (!debounceRef.current) return;
+		clearTimeout(debounceRef.current);
+		debounceRef.current = null;
+	}, []);
 
 	const syncSearchToUrl = useCallback(
 		(query: string) => {
-			if (debounceRef.current) clearTimeout(debounceRef.current);
+			cancelPendingSearchNavigation();
 			debounceRef.current = setTimeout(() => {
+				debounceRef.current = null;
 				navigate({
 					to: "/tasks",
 					search: buildSearch({ search: query }),
@@ -136,14 +142,13 @@ export function TasksView({
 				});
 			}, 300);
 		},
-		[navigate, buildSearch],
+		[cancelPendingSearchNavigation, navigate, buildSearch],
 	);
 
-	useEffect(() => {
-		return () => {
-			if (debounceRef.current) clearTimeout(debounceRef.current);
-		};
-	}, []);
+	useEffect(
+		() => cancelPendingSearchNavigation,
+		[cancelPendingSearchNavigation],
+	);
 
 	const handleSearchChange = useCallback(
 		(query: string) => {
@@ -214,21 +219,31 @@ export function TasksView({
 			availableIds.has(projectId),
 		);
 		if (availableFilters.length === projectFilters.length) return;
+		cancelPendingSearchNavigation();
 		navigate({
 			to: "/tasks",
 			search: buildSearch({ projects: availableFilters }),
 			replace: true,
 		});
-	}, [areProjectsReady, projectFilters, v2Projects, navigate, buildSearch]);
+	}, [
+		areProjectsReady,
+		projectFilters,
+		v2Projects,
+		cancelPendingSearchNavigation,
+		navigate,
+		buildSearch,
+	]);
 
 	const isLinearConnected =
 		integrations?.some((i) => i.provider === "linear") ?? false;
 
 	const handleTabChange = (tab: TabValue) => {
+		cancelPendingSearchNavigation();
 		navigate({ to: "/tasks", search: buildSearch({ tab }), replace: true });
 	};
 
 	const handleAssigneeFilterChange = (assignee: string | null) => {
+		cancelPendingSearchNavigation();
 		navigate({
 			to: "/tasks",
 			search: buildSearch({ assignee }),
@@ -239,11 +254,8 @@ export function TasksView({
 	const navigateToType = (type: TaskSource, resetSearch: boolean) => {
 		const nextSearch = resetSearch ? "" : searchQuery;
 		storeSetTypeTab(type);
+		cancelPendingSearchNavigation();
 		if (resetSearch) {
-			if (debounceRef.current) {
-				clearTimeout(debounceRef.current);
-				debounceRef.current = null;
-			}
 			setSearchQuery("");
 			storeSetSearch("");
 		}
@@ -259,6 +271,7 @@ export function TasksView({
 	};
 
 	const handleProjectFiltersChange = (projects: string[]) => {
+		cancelPendingSearchNavigation();
 		storeSetProjectFilters(projects);
 		navigate({
 			to: "/tasks",
@@ -268,6 +281,7 @@ export function TasksView({
 	};
 
 	const handleLinearProjectFilterChange = (linearProject: string | null) => {
+		cancelPendingSearchNavigation();
 		navigate({
 			to: "/tasks",
 			search: buildSearch({ linearProject }),
@@ -276,6 +290,7 @@ export function TasksView({
 	};
 
 	const handleIncludeClosedIssuesChange = (nextIncludeClosed: boolean) => {
+		cancelPendingSearchNavigation();
 		storeSetIncludeClosedIssues(nextIncludeClosed);
 		navigate({
 			to: "/tasks",

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { parseProjectFilterParam } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import { resolveProjectFilterParams } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { PullRequestsView } from "./components/PullRequestsView";
 import { Route as PullRequestsLayoutRoute } from "./layout";
 
@@ -16,13 +16,7 @@ function PullRequestsPage() {
 	return (
 		<PullRequestsView
 			initialSearch={search}
-			initialProjects={
-				projects !== undefined
-					? parseProjectFilterParam(projects)
-					: project
-						? [project]
-						: undefined
-			}
+			initialProjects={resolveProjectFilterParams(projects, project, undefined)}
 			initialState={state}
 		/>
 	);

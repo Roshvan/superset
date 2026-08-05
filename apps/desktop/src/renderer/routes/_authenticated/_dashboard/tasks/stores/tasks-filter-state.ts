@@ -49,9 +49,19 @@ interface TasksFilterState {
 	setIncludeClosedIssues: (includeClosedIssues: boolean) => void;
 }
 
+type PersistedTasksFilterState = Pick<
+	TasksFilterState,
+	| "tab"
+	| "viewMode"
+	| "typeTab"
+	| "projectFilters"
+	| "linearProjectFilter"
+	| "includeClosedIssues"
+>;
+
 export function migrateTasksFilterState(
 	persistedState: unknown,
-): TasksFilterState {
+): PersistedTasksFilterState {
 	const state =
 		persistedState && typeof persistedState === "object"
 			? (persistedState as Record<string, unknown>)
@@ -70,7 +80,7 @@ export function migrateTasksFilterState(
 			state.linearProjectFilter.trim().length > 0
 				? state.linearProjectFilter
 				: null,
-	} as unknown as TasksFilterState;
+	};
 }
 
 export const useTasksFilterStore = create<TasksFilterState>()(

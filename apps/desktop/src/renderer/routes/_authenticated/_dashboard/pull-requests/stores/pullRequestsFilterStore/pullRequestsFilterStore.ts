@@ -14,9 +14,14 @@ interface PullRequestsFilterState {
 	setIncludeClosed: (includeClosed: boolean) => void;
 }
 
+type PersistedPullRequestsFilterState = Pick<
+	PullRequestsFilterState,
+	"projectFilters" | "includeClosed"
+>;
+
 export function migratePullRequestsFilterState(
 	persistedState: unknown,
-): PullRequestsFilterState {
+): PersistedPullRequestsFilterState {
 	const state =
 		persistedState && typeof persistedState === "object"
 			? (persistedState as Record<string, unknown>)
@@ -28,7 +33,7 @@ export function migratePullRequestsFilterState(
 			state.projectFilters ?? (legacyProject ? [legacyProject] : []),
 		),
 		includeClosed: state.includeClosed === true,
-	} as unknown as PullRequestsFilterState;
+	};
 }
 
 export const usePullRequestsFilterStore = create<PullRequestsFilterState>()(

@@ -12,7 +12,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { MarkdownEditor } from "renderer/components/MarkdownEditor";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
-import { parseProjectFilterParam } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import { resolveProjectFilterParams } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { useOptimisticCollectionActions } from "renderer/routes/_authenticated/hooks/useOptimisticCollectionActions";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import { Route as TasksLayoutRoute } from "../layout";
@@ -61,12 +61,7 @@ function TaskDetailPage() {
 			assignee: assignee ?? null,
 			search: searchQuery ?? "",
 			typeTab: type === "issues" ? "issues" : "tasks",
-			projectFilters:
-				projects !== undefined
-					? parseProjectFilterParam(projects)
-					: project
-						? [project]
-						: [],
+			projectFilters: resolveProjectFilterParams(projects, project, []),
 			linearProjectFilter: linearProject ?? null,
 			includeClosedIssues: state === "all",
 		});

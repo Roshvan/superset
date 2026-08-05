@@ -63,11 +63,17 @@ export function PullRequestsView({
 			}),
 		[includeClosed, projectFilters, searchQuery],
 	);
+	const cancelPendingSearchNavigation = useCallback(() => {
+		if (!debounceRef.current) return;
+		clearTimeout(debounceRef.current);
+		debounceRef.current = null;
+	}, []);
 
 	const syncSearchToUrl = useCallback(
 		(query: string) => {
-			if (debounceRef.current) clearTimeout(debounceRef.current);
+			cancelPendingSearchNavigation();
 			debounceRef.current = setTimeout(() => {
+				debounceRef.current = null;
 				navigate({
 					to: "/pull-requests",
 					search: buildSearch({ search: query }),
@@ -75,14 +81,12 @@ export function PullRequestsView({
 				});
 			}, 300);
 		},
-		[buildSearch, navigate],
+		[buildSearch, cancelPendingSearchNavigation, navigate],
 	);
 
 	useEffect(
-		() => () => {
-			if (debounceRef.current) clearTimeout(debounceRef.current);
-		},
-		[],
+		() => cancelPendingSearchNavigation,
+		[cancelPendingSearchNavigation],
 	);
 
 	useEffect(() => {
@@ -109,12 +113,20 @@ export function PullRequestsView({
 			availableIds.has(projectId),
 		);
 		if (availableFilters.length === projectFilters.length) return;
+		cancelPendingSearchNavigation();
 		navigate({
 			to: "/pull-requests",
 			search: buildSearch({ projects: availableFilters }),
 			replace: true,
 		});
-	}, [areProjectsReady, buildSearch, navigate, projectFilters, projects]);
+	}, [
+		areProjectsReady,
+		buildSearch,
+		cancelPendingSearchNavigation,
+		navigate,
+		projectFilters,
+		projects,
+	]);
 
 	const handleSearchChange = useCallback(
 		(query: string) => {
@@ -126,6 +138,7 @@ export function PullRequestsView({
 	);
 
 	const handleProjectFiltersChange = (projects: string[]) => {
+		cancelPendingSearchNavigation();
 		storeSetProjectFilters(projects);
 		navigate({
 			to: "/pull-requests",
@@ -135,6 +148,7 @@ export function PullRequestsView({
 	};
 
 	const handleIncludeClosedChange = (nextIncludeClosed: boolean) => {
+		cancelPendingSearchNavigation();
 		storeSetIncludeClosed(nextIncludeClosed);
 		navigate({
 			to: "/pull-requests",

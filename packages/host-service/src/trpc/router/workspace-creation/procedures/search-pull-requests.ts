@@ -166,41 +166,95 @@ async function ghApiSearchPullRequests(
 	return { items, totalCount: parsed.total_count, hasNextPage };
 }
 
-const ghPrListSchema = z.array(ghPrViewSchema);
+const ghChecksGraphqlResponseSchema = z.object({
+	data: z.object({
+		repository: z
+			.record(
+				z.string(),
+				z
+					.object({
+						number: z.number(),
+						statusCheckRollup: z
+							.object({
+								contexts: z.object({
+									nodes: z.array(pullRequestCheckContextSchema.nullable()),
+								}),
+							})
+							.nullable()
+							.optional(),
+					})
+					.nullable(),
+			)
+			.nullable(),
+	}),
+});
 
-async function ghListPullRequestsWithChecks(
+async function ghGetPullRequestChecks(
 	execGh: ExecGh,
 	repo: ResolvedGithubRepo,
-	query: string,
-	includeClosed: boolean,
-	page: number,
-	perPage: number,
+	pullRequestNumbers: number[],
 ): Promise<Map<number, Pick<PullRequestResult, "checks" | "checksStatus">>> {
-	const limit = page * perPage;
-	const args = [
-		"pr",
-		"list",
-		"--repo",
-		`${repo.owner}/${repo.name}`,
-		"--state",
-		includeClosed ? "all" : "open",
-		"--limit",
-		String(limit),
-		"--json",
-		PR_VIEW_FIELDS,
-	];
-	args.push("--search", `${query} sort:updated-desc`.trim());
-	const raw = await execGh(args, { cwd: repo.repoPath ?? undefined });
+	if (pullRequestNumbers.length === 0) return new Map();
+	const selections = pullRequestNumbers
+		.map(
+			(number) => `pr${number}:pullRequest(number:${number}) {
+				number
+				statusCheckRollup {
+					contexts(first: 100) {
+						nodes {
+							__typename
+							... on CheckRun {
+								name
+								status
+								conclusion
+								detailsUrl
+								startedAt
+								completedAt
+							}
+							... on StatusContext {
+								context
+								state
+								targetUrl
+								createdAt
+							}
+						}
+					}
+				}
+			}`,
+		)
+		.join("\n");
+	const query = `query($owner: String!, $name: String!) {
+		repository(owner: $owner, name: $name) {
+			${selections}
+		}
+	}`;
+	const raw = await execGh(
+		[
+			"api",
+			"graphql",
+			"-f",
+			`query=${query}`,
+			"-F",
+			`owner=${repo.owner}`,
+			"-F",
+			`name=${repo.name}`,
+		],
+		{ cwd: repo.repoPath ?? undefined },
+	);
+	const repository = ghChecksGraphqlResponseSchema.parse(raw).data.repository;
+	if (!repository) return new Map();
+
 	return new Map(
-		ghPrListSchema
-			.parse(raw)
-			.slice((page - 1) * perPage, page * perPage)
-			.map((pr) => {
-				const { checks, checksStatus } = normalizePullRequestChecks(
-					pr.statusCheckRollup,
-				);
-				return [pr.number, { checks, checksStatus }] as const;
-			}),
+		Object.values(repository).flatMap((pullRequest) => {
+			if (!pullRequest) return [];
+			const contexts =
+				pullRequest.statusCheckRollup?.contexts.nodes.filter(
+					(context): context is z.infer<typeof pullRequestCheckContextSchema> =>
+						context !== null,
+				) ?? [];
+			const { checks, checksStatus } = normalizePullRequestChecks(contexts);
+			return [[pullRequest.number, { checks, checksStatus }] as const];
+		}),
 	);
 }
 
@@ -249,13 +303,10 @@ export const searchPullRequests = protectedProcedure
 			);
 			let pullRequests = result.items;
 			try {
-				const checksByPullRequest = await ghListPullRequestsWithChecks(
+				const checksByPullRequest = await ghGetPullRequestChecks(
 					ctx.execGh,
 					repo,
-					effectiveQuery,
-					input.includeClosed ?? false,
-					page,
-					limit,
+					result.items.map((pullRequest) => pullRequest.prNumber),
 				);
 				pullRequests = result.items.map((pullRequest) => ({
 					...pullRequest,

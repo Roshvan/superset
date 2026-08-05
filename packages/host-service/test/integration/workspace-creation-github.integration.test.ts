@@ -431,39 +431,29 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 				mergedAt: null,
 			};
 		}
-		if (args[0] === "pr" && args[1] === "list") {
-			return [
-				{
-					number: 999,
-					title: "Different search result",
-					url: "https://github.com/octocat/hello/pull/999",
-					state: "OPEN",
-					isDraft: false,
-					author: { login: "mallory" },
-					mergedAt: null,
-					updatedAt: "2026-08-05T13:00:00Z",
-					statusCheckRollup: [],
-				},
-				{
-					number: 101,
-					title: "stale list title",
-					url: "https://github.com/octocat/hello/pull/101",
-					state: "OPEN",
-					isDraft: false,
-					author: { login: "carol" },
-					mergedAt: null,
-					updatedAt: "2026-08-05T12:00:00Z",
-					statusCheckRollup: [
-						{
-							__typename: "CheckRun",
-							name: "Typecheck",
-							status: "COMPLETED",
-							conclusion: "SUCCESS",
-							detailsUrl: "https://github.com/octocat/hello/actions/1",
+		if (args[0] === "api" && args[1] === "graphql") {
+			return {
+				data: {
+					repository: {
+						pr101: {
+							number: 101,
+							statusCheckRollup: {
+								contexts: {
+									nodes: [
+										{
+											__typename: "CheckRun",
+											name: "Typecheck",
+											status: "COMPLETED",
+											conclusion: "SUCCESS",
+											detailsUrl: "https://github.com/octocat/hello/actions/1",
+										},
+									],
+								},
+							},
 						},
-					],
+					},
 				},
-			];
+			};
 		}
 		if (args[0] === "api" && args.includes("search/issues")) {
 			const qIndex = args.indexOf("-f");
@@ -558,13 +548,9 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(qArg).toContain("is:pr");
 		expect(qArg).toContain("is:open");
 		expect(qArg).toContain("find me");
-		expect(ghCalls[1].args.slice(0, 4)).toEqual([
-			"pr",
-			"list",
-			"--repo",
-			"octocat/hello",
-		]);
-		expect(ghCalls[1].args).toContain("find me sort:updated-desc");
+		expect(ghCalls[1].args.slice(0, 2)).toEqual(["api", "graphql"]);
+		expect(ghCalls[1].args.join(" ")).toContain("pullRequest(number:101)");
+		expect(ghCalls[1].args.join(" ")).not.toContain("pullRequest(number:999)");
 		expect(result.pullRequests[0].checksStatus).toBe("success");
 	});
 

@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useDebouncedSearchNavigation } from "renderer/routes/_authenticated/_dashboard/hooks/useDebouncedSearchNavigation";
 import { useProjectQueryTargets } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import {
@@ -79,8 +80,6 @@ export function TasksView({
 			? storedIncludeClosedIssues
 			: initialState === "all";
 
-	const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-
 	useEffect(() => {
 		setSearchQuery(initialSearch ?? storedSearch);
 	}, [initialSearch, storedSearch]);
@@ -124,31 +123,20 @@ export function TasksView({
 			includeClosedIssues,
 		],
 	);
-	const cancelPendingSearchNavigation = useCallback(() => {
-		if (!debounceRef.current) return;
-		clearTimeout(debounceRef.current);
-		debounceRef.current = null;
-	}, []);
-
-	const syncSearchToUrl = useCallback(
+	const navigateSearch = useCallback(
 		(query: string) => {
-			cancelPendingSearchNavigation();
-			debounceRef.current = setTimeout(() => {
-				debounceRef.current = null;
-				navigate({
-					to: "/tasks",
-					search: buildSearch({ search: query }),
-					replace: true,
-				});
-			}, 300);
+			navigate({
+				to: "/tasks",
+				search: buildSearch({ search: query }),
+				replace: true,
+			});
 		},
-		[cancelPendingSearchNavigation, navigate, buildSearch],
+		[navigate, buildSearch],
 	);
-
-	useEffect(
-		() => cancelPendingSearchNavigation,
-		[cancelPendingSearchNavigation],
-	);
+	const {
+		cancelPendingSearchNavigation,
+		scheduleSearchNavigation: syncSearchToUrl,
+	} = useDebouncedSearchNavigation(navigateSearch);
 
 	const handleSearchChange = useCallback(
 		(query: string) => {

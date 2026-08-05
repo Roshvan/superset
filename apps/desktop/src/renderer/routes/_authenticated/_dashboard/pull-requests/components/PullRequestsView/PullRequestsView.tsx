@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDebouncedSearchNavigation } from "renderer/routes/_authenticated/_dashboard/hooks/useDebouncedSearchNavigation";
 import { useProjectQueryTargets } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import {
 	pullRequestsSearchFromFilters,
@@ -32,7 +33,6 @@ export function PullRequestsView({
 	const projectFilters = initialProjects ?? storedProjectFilters;
 	const includeClosed =
 		initialState === undefined ? storedIncludeClosed : initialState === "all";
-	const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 	const {
 		isReady: areProjectsReady,
 		projects: hostProjects,
@@ -63,31 +63,20 @@ export function PullRequestsView({
 			}),
 		[includeClosed, projectFilters, searchQuery],
 	);
-	const cancelPendingSearchNavigation = useCallback(() => {
-		if (!debounceRef.current) return;
-		clearTimeout(debounceRef.current);
-		debounceRef.current = null;
-	}, []);
-
-	const syncSearchToUrl = useCallback(
+	const navigateSearch = useCallback(
 		(query: string) => {
-			cancelPendingSearchNavigation();
-			debounceRef.current = setTimeout(() => {
-				debounceRef.current = null;
-				navigate({
-					to: "/pull-requests",
-					search: buildSearch({ search: query }),
-					replace: true,
-				});
-			}, 300);
+			navigate({
+				to: "/pull-requests",
+				search: buildSearch({ search: query }),
+				replace: true,
+			});
 		},
-		[buildSearch, cancelPendingSearchNavigation, navigate],
+		[buildSearch, navigate],
 	);
-
-	useEffect(
-		() => cancelPendingSearchNavigation,
-		[cancelPendingSearchNavigation],
-	);
+	const {
+		cancelPendingSearchNavigation,
+		scheduleSearchNavigation: syncSearchToUrl,
+	} = useDebouncedSearchNavigation(navigateSearch);
 
 	useEffect(() => {
 		storeSetProjectFilters(projectFilters);

@@ -1,19 +1,16 @@
 import { Button } from "@superset/ui/button";
-import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { GoGitPullRequest } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
 import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
 import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
-import {
-	combineQueryResults,
-	mergePaginatedProjectRows,
-} from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
+import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
 import {
 	normalizePRState,
 	PRIcon,
@@ -46,28 +43,26 @@ export function PullRequestsContent({
 	includeClosed,
 	onCollapse,
 }: PullRequestsContentProps) {
-	const [pageCountByProject, setPageCountByProject] = useState<
-		Record<string, number>
-	>({});
 	const debouncedQuery = useDebouncedValue(searchQuery, 300);
 	const navigate = useNavigate();
 	const updateDraft = useNewWorkspaceDraftStore((s) => s.updateDraft);
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
-	const queryTargets = useMemo(
-		() =>
-			projectTargets.flatMap((target) => {
-				const pageCount = pageCountByProject[target.projectId] ?? 1;
-				return Array.from({ length: pageCount }, (_, index) => ({
-					target,
-					page: index + 1,
-				}));
-			}),
-		[pageCountByProject, projectTargets],
-	);
-	const queries = useQueries({
-		queries: queryTargets.map(({ target, page }) => ({
+	const {
+		queries,
+		queryTargets,
+		isFetching,
+		isFetchingNextPage,
+		hasNextPage,
+		error,
+		refetch,
+		scrollRef,
+		sentinelRef,
+	} = useMultiRepoProjectPagination({
+		projectTargets,
+		resetKey: `${debouncedQuery.trim()}\0${includeClosed}`,
+		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
 				"pullRequests",
 				"searchPullRequests",
@@ -92,28 +87,8 @@ export function PullRequestsContent({
 			staleTime: 30_000,
 			gcTime: 10 * 60_000,
 			retry: false,
-		})),
-		combine: combineQueryResults,
+		}),
 	});
-	const isFetching = queries.some((query) => query.isFetching);
-	const error = queries.find((query) => query.error)?.error;
-	const refetch = () => Promise.all(queries.map((query) => query.refetch()));
-	const latestProjectQueries = projectTargets.map((target) => {
-		const page = pageCountByProject[target.projectId] ?? 1;
-		const index = queryTargets.findIndex(
-			(queryTarget) =>
-				queryTarget.target.projectId === target.projectId &&
-				queryTarget.page === page,
-		);
-		return { target, page, query: queries[index] };
-	});
-	const isFetchingNextPage = latestProjectQueries.some(
-		({ page, query }) => page > 1 && query?.isFetching,
-	);
-	const expandableProjectIds = latestProjectQueries.flatMap(
-		({ target, query }) => (query?.data?.hasNextPage ? [target.projectId] : []),
-	);
-	const hasNextPage = expandableProjectIds.length > 0;
 
 	const pullRequests = useMemo(
 		() =>
@@ -150,34 +125,6 @@ export function PullRequestsContent({
 		),
 		pullRequests.length,
 	);
-
-	const scrollRef = useRef<HTMLDivElement>(null);
-	const sentinelRef = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		const el = sentinelRef.current;
-		const root = scrollRef.current;
-		if (!el || !root || !hasNextPage || isFetchingNextPage) return;
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (!entries[0]?.isIntersecting) return;
-				setPageCountByProject((current) => {
-					const next = { ...current };
-					for (const projectId of expandableProjectIds) {
-						next[projectId] = (current[projectId] ?? 1) + 1;
-					}
-					return next;
-				});
-			},
-			{ root, rootMargin: "200px" },
-		);
-		observer.observe(el);
-		return () => observer.disconnect();
-	}, [expandableProjectIds, hasNextPage, isFetchingNextPage]);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: restart pagination whenever the active query changes
-	useEffect(() => {
-		setPageCountByProject({});
-	}, [debouncedQuery, includeClosed, projectTargets]);
 
 	const handleAddToWorkspace = (pr: (typeof pullRequests)[number]) => {
 		const linkedPR: LinkedPR = {

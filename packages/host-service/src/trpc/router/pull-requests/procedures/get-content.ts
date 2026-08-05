@@ -27,7 +27,10 @@ const ghPullRequestContentSchema = z.object({
 	author: z.object({ login: z.string() }).optional(),
 	createdAt: z.string().optional(),
 	updatedAt: z.string().optional(),
-	statusCheckRollup: z.array(pullRequestCheckContextSchema).optional(),
+	statusCheckRollup: z
+		.array(pullRequestCheckContextSchema)
+		.nullable()
+		.optional(),
 });
 
 type PullRequestContent = {

@@ -39,5 +39,9 @@ describe("normalizePullRequestChecks", () => {
 			checks: [],
 			checksStatus: "none",
 		});
+		expect(normalizePullRequestChecks(null)).toEqual({
+			checks: [],
+			checksStatus: "none",
+		});
 	});
 });

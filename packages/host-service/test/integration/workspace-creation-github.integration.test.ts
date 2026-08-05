@@ -429,6 +429,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 				isDraft: false,
 				author: { login: "bob" },
 				mergedAt: null,
+				statusCheckRollup: null,
 			};
 		}
 		if (args[0] === "api" && args[1] === "graphql") {
@@ -517,6 +518,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(33);
 		expect(result.pullRequests[0].title).toBe("PR via gh");
+		expect(result.pullRequests[0].checks).toEqual([]);
 		expect(ghCalls).toHaveLength(1);
 		expect(ghCalls[0].args.slice(0, 5)).toEqual([
 			"pr",

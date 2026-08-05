@@ -29,7 +29,9 @@ export function PullRequestChecksSummary({
 	const { Icon, className } = STATUS_CONFIG[summary.status];
 	const label =
 		summary.status === "none"
-			? "No checks reported"
+			? checks.length === 0
+				? "No checks reported"
+				: "All checks skipped or cancelled"
 			: summary.status === "success"
 				? `All ${summary.relevantChecks.length} checks passed`
 				: summary.status === "failure"
@@ -51,7 +53,9 @@ export function PullRequestChecksSummary({
 			/>
 			<span className="hidden tabular-nums @lg:inline">
 				{summary.status === "none"
-					? "No checks"
+					? checks.length === 0
+						? "No checks"
+						: "Skipped"
 					: `${summary.passing}/${summary.relevantChecks.length}`}
 			</span>
 		</output>

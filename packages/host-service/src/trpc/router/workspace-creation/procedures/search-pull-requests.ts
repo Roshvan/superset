@@ -53,7 +53,10 @@ const ghPrViewSchema = z.object({
 	author: z.object({ login: z.string() }).nullable().optional(),
 	mergedAt: z.string().nullable().optional(),
 	updatedAt: z.string().nullable().optional(),
-	statusCheckRollup: z.array(pullRequestCheckContextSchema).optional(),
+	statusCheckRollup: z
+		.array(pullRequestCheckContextSchema)
+		.nullable()
+		.optional(),
 });
 
 const PR_VIEW_FIELDS =

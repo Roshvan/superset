@@ -36,7 +36,9 @@ export function PullRequestChecksSection({
 	const summary = summarizePullRequestChecks(checks);
 	const summaryLabel =
 		summary.status === "none"
-			? "No checks reported"
+			? checks.length === 0
+				? "No checks reported"
+				: "All checks skipped or cancelled"
 			: summary.status === "success"
 				? `All ${summary.relevantChecks.length} passed`
 				: summary.status === "failure"

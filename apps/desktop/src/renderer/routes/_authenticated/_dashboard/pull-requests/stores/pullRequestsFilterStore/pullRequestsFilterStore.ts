@@ -1,30 +1,52 @@
+import {
+	normalizeProjectFilters,
+	serializeProjectFilters,
+} from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 interface PullRequestsFilterState {
 	search: string;
-	projectFilter: string | null;
+	projectFilters: string[];
 	includeClosed: boolean;
 	setSearch: (search: string) => void;
-	setProjectFilter: (projectFilter: string | null) => void;
+	setProjectFilters: (projectFilters: string[]) => void;
 	setIncludeClosed: (includeClosed: boolean) => void;
+}
+
+export function migratePullRequestsFilterState(
+	persistedState: unknown,
+): PullRequestsFilterState {
+	const state =
+		persistedState && typeof persistedState === "object"
+			? (persistedState as Record<string, unknown>)
+			: {};
+	const legacyProject =
+		typeof state.projectFilter === "string" ? state.projectFilter : null;
+	return {
+		...state,
+		projectFilters: normalizeProjectFilters(
+			state.projectFilters ?? (legacyProject ? [legacyProject] : []),
+		),
+	} as unknown as PullRequestsFilterState;
 }
 
 export const usePullRequestsFilterStore = create<PullRequestsFilterState>()(
 	persist(
 		(set) => ({
 			search: "",
-			projectFilter: null,
+			projectFilters: [],
 			includeClosed: false,
 			setSearch: (search) => set({ search }),
-			setProjectFilter: (projectFilter) => set({ projectFilter }),
+			setProjectFilters: (projectFilters) => set({ projectFilters }),
 			setIncludeClosed: (includeClosed) => set({ includeClosed }),
 		}),
 		{
 			name: "pull-requests-filter-state",
-			version: 1,
+			version: 2,
+			migrate: migratePullRequestsFilterState,
 			partialize: (state) => ({
-				projectFilter: state.projectFilter,
+				projectFilters: state.projectFilters,
 				includeClosed: state.includeClosed,
 			}),
 		},
@@ -33,7 +55,7 @@ export const usePullRequestsFilterStore = create<PullRequestsFilterState>()(
 
 interface PullRequestsFilters {
 	search: string;
-	projectFilter: string | null;
+	projectFilters: string[];
 	includeClosed: boolean;
 }
 
@@ -42,7 +64,8 @@ export function pullRequestsSearchFromFilters(
 ): Record<string, string> {
 	const search: Record<string, string> = {};
 	if (filters.search) search.search = filters.search;
-	if (filters.projectFilter) search.project = filters.projectFilter;
+	const projects = serializeProjectFilters(filters.projectFilters);
+	if (projects) search.projects = projects;
 	if (filters.includeClosed) search.state = "all";
 	return search;
 }

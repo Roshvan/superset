@@ -1,15 +1,15 @@
 import { Button } from "@superset/ui/button";
 import { Checkbox } from "@superset/ui/checkbox";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoIssueClosed, GoIssueOpened } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
-import { useHostUrl } from "renderer/hooks/host-service/useHostTargetUrl";
 import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
-import { shouldKeepWorkItemsPlaceholder } from "renderer/routes/_authenticated/_dashboard/utils/shouldKeepWorkItemsPlaceholder";
+import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import {
 	type LinkedIssue,
 	useNewWorkspaceDraftStore,
@@ -21,11 +21,12 @@ export interface SelectedIssue {
 	title: string;
 	url: string;
 	state: string;
+	projectId: string;
 }
 
 interface GitHubIssuesContentProps {
-	projectFilter: string | null;
-	hostId: string | null;
+	projectFilters: string[];
+	projectTargets: ProjectQueryTarget[];
 	areProjectsReady: boolean;
 	hasProjects: boolean;
 	searchQuery: string;
@@ -40,8 +41,8 @@ interface GitHubIssuesContentProps {
 const PAGE_SIZE = 30;
 
 export function GitHubIssuesContent({
-	projectFilter,
-	hostId,
+	projectFilters,
+	projectTargets,
 	areProjectsReady,
 	hasProjects,
 	searchQuery,
@@ -50,77 +51,83 @@ export function GitHubIssuesContent({
 	onSelectionChange,
 }: GitHubIssuesContentProps) {
 	const [selectedIssues, setSelectedIssues] = useState<
-		Map<number, SelectedIssue>
+		Map<string, SelectedIssue>
 	>(new Map());
+	const [pageCount, setPageCount] = useState(1);
 	const debouncedQuery = useDebouncedValue(searchQuery, 300);
-	const hostUrl = useHostUrl(hostId ?? undefined);
 	const navigate = useNavigate();
 	const updateDraft = useNewWorkspaceDraftStore((s) => s.updateDraft);
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
-	const {
-		data,
-		isFetching,
-		isFetchingNextPage,
-		fetchNextPage,
-		hasNextPage,
-		error,
-		refetch,
-	} = useInfiniteQuery({
-		queryKey: [
-			"tasks",
-			"searchGitHubIssues",
-			projectFilter,
-			hostUrl,
-			debouncedQuery.trim(),
-			includeClosed,
-		],
-		queryFn: async ({ pageParam }) => {
-			if (!hostUrl || !projectFilter) {
-				return {
-					issues: [],
-					totalCount: 0,
-					hasNextPage: false,
-					page: pageParam,
-				};
-			}
-			const client = getHostServiceClientByUrl(hostUrl);
-			return client.workspaceCreation.searchGitHubIssues.query({
-				projectId: projectFilter,
-				query: debouncedQuery.trim() || undefined,
-				limit: PAGE_SIZE,
+	const queryTargets = useMemo(
+		() =>
+			projectTargets.flatMap((target) =>
+				Array.from({ length: pageCount }, (_, index) => ({
+					target,
+					page: index + 1,
+				})),
+			),
+		[pageCount, projectTargets],
+	);
+	const queries = useQueries({
+		queries: queryTargets.map(({ target, page }) => ({
+			queryKey: [
+				"tasks",
+				"searchGitHubIssues",
+				target.projectId,
+				target.hostUrl,
+				debouncedQuery.trim(),
 				includeClosed,
-				page: pageParam,
-			});
-		},
-		initialPageParam: 1,
-		getNextPageParam: (lastPage) =>
-			lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-		staleTime: 30_000,
-		gcTime: 10 * 60_000,
-		placeholderData: (previousData, previousQuery) => {
-			return shouldKeepWorkItemsPlaceholder(
-				previousQuery?.queryKey,
-				projectFilter,
-				hostUrl,
-			)
-				? previousData
-				: undefined;
-		},
-		enabled: !!projectFilter && !!hostUrl,
-		retry: false,
+				page,
+			],
+			queryFn: async () => {
+				if (!target.hostUrl) return null;
+				const client = getHostServiceClientByUrl(target.hostUrl);
+				return client.workspaceCreation.searchGitHubIssues.query({
+					projectId: target.projectId,
+					query: debouncedQuery.trim() || undefined,
+					limit: PAGE_SIZE,
+					includeClosed,
+					page,
+				});
+			},
+			enabled: !!target.hostUrl,
+			staleTime: 30_000,
+			gcTime: 10 * 60_000,
+			retry: false,
+		})),
 	});
+	const isFetching = queries.some((query) => query.isFetching);
+	const error = queries.find((query) => query.error)?.error;
+	const refetch = () => Promise.all(queries.map((query) => query.refetch()));
+	const isFetchingNextPage = queries.some(
+		(query, index) =>
+			queryTargets[index]?.page === pageCount && query.isFetching,
+	);
+	const hasNextPage = queries.some(
+		(query, index) =>
+			queryTargets[index]?.page === pageCount && query.data?.hasNextPage,
+	);
 
 	const issues = useMemo(
-		() => data?.pages.flatMap((p) => p.issues) ?? [],
-		[data],
+		() =>
+			queries.flatMap((query, index) => {
+				const target = queryTargets[index]?.target;
+				if (!target || !query.data) return [];
+				return query.data.issues.map((issue) => ({ ...issue, ...target }));
+			}),
+		[queries, queryTargets],
 	);
-	const totalCount = data?.pages[0]?.totalCount ?? 0;
+	const totalCount = queries.reduce((total, query, index) => {
+		return queryTargets[index]?.page === 1
+			? total + (query.data?.totalCount ?? 0)
+			: total;
+	}, 0);
 	const repoMismatch = useMemo(() => {
-		const first = data?.pages[0];
-		return first && "repoMismatch" in first ? first.repoMismatch : null;
-	}, [data]);
+		const mismatch = queries.find((query) => query.data?.repoMismatch)?.data;
+		return mismatch?.repoMismatch ?? null;
+	}, [queries]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
@@ -130,13 +137,18 @@ export function GitHubIssuesContent({
 		if (!el || !root || !hasNextPage || isFetchingNextPage) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0]?.isIntersecting) fetchNextPage();
+				if (entries[0]?.isIntersecting) setPageCount((count) => count + 1);
 			},
 			{ root, rootMargin: "200px" },
 		);
 		observer.observe(el);
 		return () => observer.disconnect();
-	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: restart pagination whenever the active query changes
+	useEffect(() => {
+		setPageCount(1);
+	}, [debouncedQuery, includeClosed, projectTargets]);
 
 	const clearSelection = useCallback(() => {
 		setSelectedIssues(new Map());
@@ -145,7 +157,7 @@ export function GitHubIssuesContent({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: clear selection only when project changes
 	useEffect(() => {
 		setSelectedIssues(new Map());
-	}, [projectFilter]);
+	}, [projectFilters]);
 
 	useEffect(() => {
 		if (!onSelectionChange) return;
@@ -156,10 +168,11 @@ export function GitHubIssuesContent({
 		(issue: SelectedIssue, checked: boolean) => {
 			setSelectedIssues((prev) => {
 				const next = new Map(prev);
+				const key = `${issue.projectId}:${issue.issueNumber}`;
 				if (checked) {
-					next.set(issue.issueNumber, issue);
+					next.set(key, issue);
 				} else {
-					next.delete(issue.issueNumber);
+					next.delete(key);
 				}
 				return next;
 			});
@@ -168,7 +181,6 @@ export function GitHubIssuesContent({
 	);
 
 	const handleAddToWorkspace = (issue: (typeof issues)[number]) => {
-		if (!projectFilter) return;
 		const linkedIssue: LinkedIssue = {
 			slug: `gh-${issue.issueNumber}`,
 			title: issue.title,
@@ -179,32 +191,32 @@ export function GitHubIssuesContent({
 		};
 		resetDraft();
 		updateDraft({
-			selectedProjectId: projectFilter,
-			hostId,
+			selectedProjectId: issue.projectId,
+			hostId: issue.hostId,
 			linkedIssues: [linkedIssue],
 		});
-		openModal(projectFilter);
+		openModal(issue.projectId);
 	};
 
 	const handleOpenUrl = (url: string) => {
 		window.open(url, "_blank", "noopener,noreferrer");
 	};
 
-	const handleOpenPreview = (issueNumber: number) => {
-		if (!projectFilter) return;
+	const handleOpenPreview = (issue: (typeof issues)[number]) => {
 		navigate({
 			to: "/tasks/issue/$issueNumber",
-			params: { issueNumber: String(issueNumber) },
+			params: { issueNumber: String(issue.issueNumber) },
 			search: {
 				search: searchQuery || undefined,
 				type: "issues",
-				project: projectFilter,
+				project: issue.projectId,
+				projects: serializeProjectFilters(projectFilters),
 				state: includeClosed ? "all" : undefined,
 			},
 		});
 	};
 
-	if (!projectFilter) {
+	if (projectTargets.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center p-8">
 				<div className="flex flex-col items-center gap-2 text-muted-foreground text-center">
@@ -221,7 +233,7 @@ export function GitHubIssuesContent({
 		);
 	}
 
-	if (!hostId || !hostUrl) {
+	if (projectTargets.every((target) => !target.hostUrl)) {
 		return (
 			<div className="flex h-full items-center justify-center p-8">
 				<div className="flex max-w-prose flex-col items-center gap-2 text-center text-muted-foreground">
@@ -310,18 +322,19 @@ export function GitHubIssuesContent({
 						{issues.map((issue) => {
 							const isClosed = issue.state.toLowerCase() === "closed";
 							const StateIcon = isClosed ? GoIssueClosed : GoIssueOpened;
-							const isSelected = selectedIssues.has(issue.issueNumber);
+							const selectionKey = `${issue.projectId}:${issue.issueNumber}`;
+							const isSelected = selectedIssues.has(selectionKey);
 							return (
 								// biome-ignore lint/a11y/useSemanticElements: row contains nested action buttons, so the outer element is a div with role/tabIndex
 								<div
-									key={issue.issueNumber}
+									key={selectionKey}
 									className="group flex h-9 cursor-pointer items-center gap-3 border-b border-border/50 px-4 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-									onClick={() => handleOpenPreview(issue.issueNumber)}
+									onClick={() => handleOpenPreview(issue)}
 									onKeyDown={(e) => {
 										if (e.target !== e.currentTarget) return;
 										if (e.key === "Enter" || e.key === " ") {
 											e.preventDefault();
-											handleOpenPreview(issue.issueNumber);
+											handleOpenPreview(issue);
 										}
 									}}
 									role="button"
@@ -336,6 +349,7 @@ export function GitHubIssuesContent({
 													title: issue.title,
 													url: issue.url,
 													state: issue.state,
+													projectId: issue.projectId,
 												},
 												checked === true,
 											)
@@ -351,6 +365,11 @@ export function GitHubIssuesContent({
 												: "size-4 shrink-0 text-emerald-500"
 										}
 									/>
+									{projectTargets.length > 1 && (
+										<span className="hidden max-w-28 shrink-0 truncate text-xs text-muted-foreground @lg:inline">
+											{issue.projectName}
+										</span>
+									)}
 									<span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
 										#{issue.issueNumber}
 									</span>

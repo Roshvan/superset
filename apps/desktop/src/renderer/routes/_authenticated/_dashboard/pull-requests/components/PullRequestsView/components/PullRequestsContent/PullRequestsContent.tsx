@@ -1,14 +1,14 @@
 import { Button } from "@superset/ui/button";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GoGitPullRequest } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
-import { useHostUrl } from "renderer/hooks/host-service/useHostTargetUrl";
 import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
-import { shouldKeepWorkItemsPlaceholder } from "renderer/routes/_authenticated/_dashboard/utils/shouldKeepWorkItemsPlaceholder";
+import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
+import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import {
 	normalizePRState,
 	PRIcon,
@@ -18,10 +18,11 @@ import {
 	useNewWorkspaceDraftStore,
 } from "renderer/stores/new-workspace-draft";
 import { useOpenNewWorkspaceModal } from "renderer/stores/new-workspace-modal";
+import { PullRequestChecksSummary } from "../../../PullRequestChecksSummary";
 
 interface PullRequestsContentProps {
-	projectFilter: string | null;
-	hostId: string | null;
+	projectFilters: string[];
+	projectTargets: ProjectQueryTarget[];
 	areProjectsReady: boolean;
 	hasProjects: boolean;
 	searchQuery: string;
@@ -32,83 +33,97 @@ interface PullRequestsContentProps {
 const PAGE_SIZE = 30;
 
 export function PullRequestsContent({
-	projectFilter,
-	hostId,
+	projectFilters,
+	projectTargets,
 	areProjectsReady,
 	hasProjects,
 	searchQuery,
 	includeClosed,
 	onCollapse,
 }: PullRequestsContentProps) {
+	const [pageCount, setPageCount] = useState(1);
 	const debouncedQuery = useDebouncedValue(searchQuery, 300);
-	const hostUrl = useHostUrl(hostId ?? undefined);
 	const navigate = useNavigate();
 	const updateDraft = useNewWorkspaceDraftStore((s) => s.updateDraft);
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
-	const {
-		data,
-		isFetching,
-		isFetchingNextPage,
-		fetchNextPage,
-		hasNextPage,
-		error,
-		refetch,
-	} = useInfiniteQuery({
-		queryKey: [
-			"pullRequests",
-			"searchPullRequests",
-			projectFilter,
-			hostUrl,
-			debouncedQuery.trim(),
-			includeClosed,
-		],
-		queryFn: async ({ pageParam }) => {
-			if (!hostUrl || !projectFilter) {
-				return {
-					pullRequests: [],
-					totalCount: 0,
-					hasNextPage: false,
-					page: pageParam,
-				};
-			}
-			const client = getHostServiceClientByUrl(hostUrl);
-			return client.workspaceCreation.searchPullRequests.query({
-				projectId: projectFilter,
-				query: debouncedQuery.trim() || undefined,
-				limit: PAGE_SIZE,
+	const queryTargets = useMemo(
+		() =>
+			projectTargets.flatMap((target) =>
+				Array.from({ length: pageCount }, (_, index) => ({
+					target,
+					page: index + 1,
+				})),
+			),
+		[pageCount, projectTargets],
+	);
+	const queries = useQueries({
+		queries: queryTargets.map(({ target, page }) => ({
+			queryKey: [
+				"pullRequests",
+				"searchPullRequests",
+				target.projectId,
+				target.hostUrl,
+				debouncedQuery.trim(),
 				includeClosed,
-				page: pageParam,
-			});
-		},
-		initialPageParam: 1,
-		getNextPageParam: (lastPage) =>
-			lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-		staleTime: 30_000,
-		gcTime: 10 * 60_000,
-		placeholderData: (previousData, previousQuery) => {
-			return shouldKeepWorkItemsPlaceholder(
-				previousQuery?.queryKey,
-				projectFilter,
-				hostUrl,
-			)
-				? previousData
-				: undefined;
-		},
-		enabled: !!projectFilter && !!hostUrl,
-		retry: false,
+				page,
+			],
+			queryFn: async () => {
+				if (!target.hostUrl) return null;
+				const client = getHostServiceClientByUrl(target.hostUrl);
+				return client.workspaceCreation.searchPullRequests.query({
+					projectId: target.projectId,
+					query: debouncedQuery.trim() || undefined,
+					limit: PAGE_SIZE,
+					includeClosed,
+					page,
+				});
+			},
+			enabled: !!target.hostUrl,
+			staleTime: 30_000,
+			gcTime: 10 * 60_000,
+			retry: false,
+		})),
 	});
+	const isFetching = queries.some((query) => query.isFetching);
+	const error = queries.find((query) => query.error)?.error;
+	const refetch = () => Promise.all(queries.map((query) => query.refetch()));
+	const isFetchingNextPage = queries.some(
+		(query, index) =>
+			queryTargets[index]?.page === pageCount && query.isFetching,
+	);
+	const hasNextPage = queries.some(
+		(query, index) =>
+			queryTargets[index]?.page === pageCount && query.data?.hasNextPage,
+	);
 
 	const pullRequests = useMemo(
-		() => data?.pages.flatMap((p) => p.pullRequests) ?? [],
-		[data],
+		() =>
+			queries
+				.flatMap((query, index) => {
+					const target = queryTargets[index]?.target;
+					if (!target || !query.data) return [];
+					return query.data.pullRequests.map((pullRequest) => ({
+						...pullRequest,
+						...target,
+					}));
+				})
+				.sort(
+					(a, b) =>
+						Date.parse(b.updatedAt ?? "") - Date.parse(a.updatedAt ?? ""),
+				),
+		[queries, queryTargets],
 	);
-	const totalCount = data?.pages[0]?.totalCount ?? 0;
+	const totalCount = queries.reduce((total, query, index) => {
+		return queryTargets[index]?.page === 1
+			? total + (query.data?.totalCount ?? 0)
+			: total;
+	}, 0);
 	const repoMismatch = useMemo(() => {
-		const first = data?.pages[0];
-		return first && "repoMismatch" in first ? first.repoMismatch : null;
-	}, [data]);
+		const mismatch = queries.find((query) => query.data?.repoMismatch)?.data;
+		return mismatch?.repoMismatch ?? null;
+	}, [queries]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
@@ -118,16 +133,20 @@ export function PullRequestsContent({
 		if (!el || !root || !hasNextPage || isFetchingNextPage) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0]?.isIntersecting) fetchNextPage();
+				if (entries[0]?.isIntersecting) setPageCount((count) => count + 1);
 			},
 			{ root, rootMargin: "200px" },
 		);
 		observer.observe(el);
 		return () => observer.disconnect();
-	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: restart pagination whenever the active query changes
+	useEffect(() => {
+		setPageCount(1);
+	}, [debouncedQuery, includeClosed, projectTargets]);
 
 	const handleAddToWorkspace = (pr: (typeof pullRequests)[number]) => {
-		if (!projectFilter) return;
 		const linkedPR: LinkedPR = {
 			prNumber: pr.prNumber,
 			title: pr.title,
@@ -136,31 +155,31 @@ export function PullRequestsContent({
 		};
 		resetDraft();
 		updateDraft({
-			selectedProjectId: projectFilter,
-			hostId,
+			selectedProjectId: pr.projectId,
+			hostId: pr.hostId,
 			linkedPR,
 		});
-		openModal(projectFilter);
+		openModal(pr.projectId);
 	};
 
 	const handleOpenUrl = (url: string) => {
 		window.open(url, "_blank", "noopener,noreferrer");
 	};
 
-	const handleOpenPreview = (prNumber: number) => {
-		if (!projectFilter) return;
+	const handleOpenPreview = (pr: (typeof pullRequests)[number]) => {
 		navigate({
 			to: "/pull-requests/$prNumber",
-			params: { prNumber: String(prNumber) },
+			params: { prNumber: String(pr.prNumber) },
 			search: {
 				search: searchQuery || undefined,
-				project: projectFilter,
+				project: pr.projectId,
+				projects: serializeProjectFilters(projectFilters),
 				state: includeClosed ? "all" : undefined,
 			},
 		});
 	};
 
-	if (!projectFilter) {
+	if (projectTargets.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center p-8">
 				<div className="flex flex-col items-center gap-2 text-muted-foreground text-center">
@@ -177,7 +196,7 @@ export function PullRequestsContent({
 		);
 	}
 
-	if (!hostId || !hostUrl) {
+	if (projectTargets.every((target) => !target.hostUrl)) {
 		return (
 			<div className="flex h-full items-center justify-center p-8">
 				<div className="flex max-w-prose flex-col items-center gap-2 text-center text-muted-foreground">
@@ -267,29 +286,36 @@ export function PullRequestsContent({
 					<div className="flex flex-col">
 						{pullRequests.map((pr) => {
 							const state = normalizePRState(pr.state, pr.isDraft);
+							const rowKey = `${pr.projectId}:${pr.prNumber}`;
 							return (
 								// biome-ignore lint/a11y/useSemanticElements: row contains nested action buttons, so the outer element is a div with role/tabIndex
 								<div
-									key={pr.prNumber}
-									className="group flex h-9 cursor-pointer items-center gap-3 border-b border-border/50 px-4 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-									onClick={() => handleOpenPreview(pr.prNumber)}
+									key={rowKey}
+									className="group flex h-10 cursor-pointer items-center gap-3 border-b border-border/50 px-4 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+									onClick={() => handleOpenPreview(pr)}
 									onKeyDown={(e) => {
 										if (e.target !== e.currentTarget) return;
 										if (e.key === "Enter" || e.key === " ") {
 											e.preventDefault();
-											handleOpenPreview(pr.prNumber);
+											handleOpenPreview(pr);
 										}
 									}}
 									role="button"
 									tabIndex={0}
 								>
 									<PRIcon state={state} className="size-4 shrink-0" />
+									{projectTargets.length > 1 && (
+										<span className="hidden max-w-28 shrink-0 truncate text-xs text-muted-foreground @lg:inline">
+											{pr.projectName}
+										</span>
+									)}
 									<span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
 										#{pr.prNumber}
 									</span>
 									<span className="min-w-0 flex-1 truncate text-sm font-medium">
 										{pr.title}
 									</span>
+									<PullRequestChecksSummary checks={pr.checks} />
 									{pr.authorLogin && (
 										<span className="hidden shrink-0 text-xs text-muted-foreground @md:inline">
 											{pr.authorLogin}

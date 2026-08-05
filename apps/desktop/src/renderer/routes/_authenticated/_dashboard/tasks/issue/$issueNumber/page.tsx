@@ -6,6 +6,7 @@ import { GoIssueClosed, GoIssueOpened } from "react-icons/go";
 import { MarkdownRenderer } from "renderer/components/MarkdownRenderer";
 import { useHostUrl } from "renderer/hooks/host-service/useHostTargetUrl";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
+import { parseProjectFilterParam } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { WorkItemDetailHeader } from "renderer/routes/_authenticated/_dashboard/components/WorkItemDetailHeader";
 import { WorkItemDetailState } from "renderer/routes/_authenticated/_dashboard/components/WorkItemDetailState";
 import { useProjectHost } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectHost";
@@ -47,7 +48,12 @@ function IssueDetailPage() {
 				assignee: search.assignee ?? null,
 				search: search.search ?? "",
 				typeTab: "issues",
-				projectFilter: projectId,
+				projectFilters:
+					search.projects !== undefined
+						? parseProjectFilterParam(search.projects)
+						: projectId
+							? [projectId]
+							: [],
 				linearProjectFilter: search.linearProject ?? null,
 				includeClosedIssues: search.state === "all",
 			}),
@@ -56,6 +62,7 @@ function IssueDetailPage() {
 			search.assignee,
 			search.linearProject,
 			search.search,
+			search.projects,
 			search.state,
 			search.tab,
 		],

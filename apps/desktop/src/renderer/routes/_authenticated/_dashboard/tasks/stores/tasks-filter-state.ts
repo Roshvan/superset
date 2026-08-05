@@ -1,9 +1,20 @@
+import {
+	normalizeProjectFilters,
+	serializeProjectFilters,
+} from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type ViewMode = "table" | "board";
 export type TypeTab = "tasks" | "issues";
-export type FilterTab = "all" | "active" | "backlog";
+export type FilterTab =
+	| "all"
+	| "active"
+	| "backlog"
+	| "unstarted"
+	| "started"
+	| "completed"
+	| "canceled";
 
 interface TasksFilterState {
 	tab: FilterTab;
@@ -11,7 +22,7 @@ interface TasksFilterState {
 	search: string;
 	viewMode: ViewMode;
 	typeTab: TypeTab;
-	projectFilter: string | null;
+	projectFilters: string[];
 	linearProjectFilter: string | null;
 	includeClosedIssues: boolean;
 	setTab: (tab: FilterTab) => void;
@@ -19,7 +30,7 @@ interface TasksFilterState {
 	setSearch: (search: string) => void;
 	setViewMode: (viewMode: ViewMode) => void;
 	setTypeTab: (typeTab: TypeTab) => void;
-	setProjectFilter: (projectFilter: string | null) => void;
+	setProjectFilters: (projectFilters: string[]) => void;
 	setLinearProjectFilter: (linearProjectFilter: string | null) => void;
 	setIncludeClosedIssues: (includeClosedIssues: boolean) => void;
 }
@@ -35,6 +46,10 @@ export function migrateTasksFilterState(
 		...state,
 		typeTab: state.typeTab === "issues" ? "issues" : "tasks",
 		includeClosedIssues: state.includeClosedIssues === true,
+		projectFilters: normalizeProjectFilters(
+			state.projectFilters ??
+				(typeof state.projectFilter === "string" ? [state.projectFilter] : []),
+		),
 	} as unknown as TasksFilterState;
 }
 
@@ -46,7 +61,7 @@ export const useTasksFilterStore = create<TasksFilterState>()(
 			search: "",
 			viewMode: "table",
 			typeTab: "tasks",
-			projectFilter: null,
+			projectFilters: [],
 			linearProjectFilter: null,
 			includeClosedIssues: false,
 			setTab: (tab) => set({ tab }),
@@ -54,7 +69,7 @@ export const useTasksFilterStore = create<TasksFilterState>()(
 			setSearch: (search) => set({ search }),
 			setViewMode: (viewMode) => set({ viewMode }),
 			setTypeTab: (typeTab) => set({ typeTab }),
-			setProjectFilter: (projectFilter) => set({ projectFilter }),
+			setProjectFilters: (projectFilters) => set({ projectFilters }),
 			setLinearProjectFilter: (linearProjectFilter) =>
 				set({ linearProjectFilter }),
 			setIncludeClosedIssues: (includeClosedIssues) =>
@@ -62,10 +77,10 @@ export const useTasksFilterStore = create<TasksFilterState>()(
 		}),
 		{
 			name: "tasks-filter-state",
-			version: 3,
+			version: 4,
 			migrate: migrateTasksFilterState,
 			partialize: (state) => ({
-				projectFilter: state.projectFilter,
+				projectFilters: state.projectFilters,
 				linearProjectFilter: state.linearProjectFilter,
 				tab: state.tab,
 				typeTab: state.typeTab,
@@ -81,7 +96,7 @@ export interface TasksFilters {
 	assignee: string | null;
 	search: string;
 	typeTab: TypeTab;
-	projectFilter: string | null;
+	projectFilters: string[];
 	linearProjectFilter: string | null;
 	includeClosedIssues: boolean;
 }
@@ -94,7 +109,8 @@ export function tasksSearchFromFilters(
 	if (filters.assignee) out.assignee = filters.assignee;
 	if (filters.search) out.search = filters.search;
 	if (filters.typeTab !== "tasks") out.type = filters.typeTab;
-	if (filters.projectFilter) out.project = filters.projectFilter;
+	const projects = serializeProjectFilters(filters.projectFilters);
+	if (projects) out.projects = projects;
 	if (filters.linearProjectFilter)
 		out.linearProject = filters.linearProjectFilter;
 	if (filters.typeTab === "issues" && filters.includeClosedIssues)

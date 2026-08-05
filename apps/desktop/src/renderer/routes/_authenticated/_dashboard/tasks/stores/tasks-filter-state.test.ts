@@ -12,7 +12,7 @@ describe("tasksSearchFromFilters", () => {
 				assignee: null,
 				search: "",
 				typeTab: "tasks",
-				projectFilter: null,
+				projectFilters: [],
 				linearProjectFilter: null,
 				includeClosedIssues: false,
 			}),
@@ -26,7 +26,7 @@ describe("tasksSearchFromFilters", () => {
 				assignee: "me",
 				search: "remote host",
 				typeTab: "issues",
-				projectFilter: "project-1",
+				projectFilters: ["project-1", "project-2"],
 				linearProjectFilter: null,
 				includeClosedIssues: true,
 			}),
@@ -35,7 +35,7 @@ describe("tasksSearchFromFilters", () => {
 			assignee: "me",
 			search: "remote host",
 			type: "issues",
-			project: "project-1",
+			projects: "project-1,project-2",
 			state: "all",
 		});
 	});
@@ -47,12 +47,12 @@ describe("tasksSearchFromFilters", () => {
 				assignee: null,
 				search: "",
 				typeTab: "tasks",
-				projectFilter: "project-1",
+				projectFilters: ["project-1"],
 				linearProjectFilter: "linear-project-1",
 				includeClosedIssues: true,
 			}),
 		).toEqual({
-			project: "project-1",
+			projects: "project-1",
 			linearProject: "linear-project-1",
 		});
 	});
@@ -67,7 +67,7 @@ describe("migrateTasksFilterState", () => {
 			}),
 		).toMatchObject({
 			typeTab: "tasks",
-			projectFilter: "project-1",
+			projectFilters: ["project-1"],
 			includeClosedIssues: false,
 		});
 	});

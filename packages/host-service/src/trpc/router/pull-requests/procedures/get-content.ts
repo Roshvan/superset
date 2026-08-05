@@ -3,6 +3,10 @@ import { z } from "zod";
 import { protectedProcedure } from "../../../index";
 import { resolveGithubRepo } from "../../workspace-creation/shared/project-helpers";
 import { execGh } from "../../workspace-creation/utils/exec-gh";
+import {
+	normalizePullRequestChecks,
+	pullRequestCheckContextSchema,
+} from "../pull-request-checks";
 
 const getContentInputSchema = z.object({
 	projectId: z.string(),
@@ -23,6 +27,7 @@ const ghPullRequestContentSchema = z.object({
 	author: z.object({ login: z.string() }).optional(),
 	createdAt: z.string().optional(),
 	updatedAt: z.string().optional(),
+	statusCheckRollup: z.array(pullRequestCheckContextSchema).optional(),
 });
 
 type PullRequestContent = {
@@ -39,6 +44,8 @@ type PullRequestContent = {
 	isDraft: boolean;
 	createdAt: string | undefined;
 	updatedAt: string | undefined;
+	checks: ReturnType<typeof normalizePullRequestChecks>["checks"];
+	checksStatus: ReturnType<typeof normalizePullRequestChecks>["checksStatus"];
 };
 
 // Browsing the PR list re-opens the detail panel constantly; cache the
@@ -73,9 +80,12 @@ export const getContent = protectedProcedure
 					"--repo",
 					`${repo.owner}/${repo.name}`,
 					"--json",
-					"number,title,body,url,state,author,headRefName,baseRefName,headRepositoryOwner,isCrossRepository,isDraft,createdAt,updatedAt",
+					"number,title,body,url,state,author,headRefName,baseRefName,headRepositoryOwner,isCrossRepository,isDraft,createdAt,updatedAt,statusCheckRollup",
 				]);
 				const data = ghPullRequestContentSchema.parse(raw);
+				const { checks, checksStatus } = normalizePullRequestChecks(
+					data.statusCheckRollup,
+				);
 				return {
 					number: data.number,
 					title: data.title,
@@ -90,6 +100,8 @@ export const getContent = protectedProcedure
 					isDraft: data.isDraft,
 					createdAt: data.createdAt,
 					updatedAt: data.updatedAt,
+					checks,
+					checksStatus,
 				};
 			} catch (err) {
 				throw new TRPCError({

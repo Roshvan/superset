@@ -1,5 +1,13 @@
 import { z } from "zod";
+import type {
+	ChecksStatus,
+	PullRequestCheck,
+} from "../../../../runtime/pull-requests/utils/pull-request-mappers";
 import { protectedProcedure } from "../../../index";
+import {
+	normalizePullRequestChecks,
+	pullRequestCheckContextSchema,
+} from "../../pull-requests/pull-request-checks";
 import { normalizeGitHubQuery } from "../normalize-github-query";
 import { githubSearchInputSchema } from "../schemas";
 import {
@@ -15,6 +23,9 @@ interface PullRequestResult {
 	state: "open" | "closed" | "merged";
 	isDraft: boolean;
 	authorLogin: string | null;
+	updatedAt: string | null;
+	checks: PullRequestCheck[];
+	checksStatus: ChecksStatus;
 }
 
 export interface PullRequestsPage {
@@ -41,9 +52,12 @@ const ghPrViewSchema = z.object({
 	isDraft: z.boolean().optional(),
 	author: z.object({ login: z.string() }).nullable().optional(),
 	mergedAt: z.string().nullable().optional(),
+	updatedAt: z.string().nullable().optional(),
+	statusCheckRollup: z.array(pullRequestCheckContextSchema).optional(),
 });
 
-const PR_VIEW_FIELDS = "number,title,url,state,isDraft,author,mergedAt";
+const PR_VIEW_FIELDS =
+	"number,title,url,state,isDraft,author,mergedAt,updatedAt,statusCheckRollup";
 
 async function ghDirectLookup(
 	execGh: ExecGh,
@@ -63,6 +77,9 @@ async function ghDirectLookup(
 		{ cwd: repo.repoPath ?? undefined },
 	);
 	const pr = ghPrViewSchema.parse(raw);
+	const { checks, checksStatus } = normalizePullRequestChecks(
+		pr.statusCheckRollup,
+	);
 	return {
 		prNumber: pr.number,
 		title: pr.title,
@@ -70,6 +87,9 @@ async function ghDirectLookup(
 		state: normalizePullRequestState(pr.state, pr.mergedAt),
 		isDraft: pr.isDraft ?? false,
 		authorLogin: pr.author?.login ?? null,
+		updatedAt: pr.updatedAt ?? null,
+		checks,
+		checksStatus,
 	};
 }
 
@@ -85,6 +105,7 @@ const searchIssuesItemSchema = z.object({
 			merged_at: z.string().nullable().optional(),
 		})
 		.optional(),
+	updated_at: z.string().optional(),
 });
 
 const searchIssuesResponseSchema = z.object({
@@ -137,9 +158,58 @@ async function ghApiSearchPullRequests(
 			),
 			isDraft: item.draft ?? false,
 			authorLogin: item.user?.login ?? null,
+			updatedAt: item.updated_at ?? null,
+			checks: [],
+			checksStatus: "none",
 		}));
 	const hasNextPage = page * perPage < parsed.total_count;
 	return { items, totalCount: parsed.total_count, hasNextPage };
+}
+
+const ghPrListSchema = z.array(ghPrViewSchema);
+
+async function ghListPullRequestsWithChecks(
+	execGh: ExecGh,
+	repo: ResolvedGithubRepo,
+	query: string,
+	includeClosed: boolean,
+	page: number,
+	perPage: number,
+): Promise<PullRequestResult[]> {
+	const limit = page * perPage;
+	const args = [
+		"pr",
+		"list",
+		"--repo",
+		`${repo.owner}/${repo.name}`,
+		"--state",
+		includeClosed ? "all" : "open",
+		"--limit",
+		String(limit),
+		"--json",
+		PR_VIEW_FIELDS,
+	];
+	if (query) args.push("--search", `${query} sort:updated-desc`);
+	const raw = await execGh(args, { cwd: repo.repoPath ?? undefined });
+	return ghPrListSchema
+		.parse(raw)
+		.slice((page - 1) * perPage, page * perPage)
+		.map((pr) => {
+			const { checks, checksStatus } = normalizePullRequestChecks(
+				pr.statusCheckRollup,
+			);
+			return {
+				prNumber: pr.number,
+				title: pr.title,
+				url: pr.url,
+				state: normalizePullRequestState(pr.state, pr.mergedAt),
+				isDraft: pr.isDraft ?? false,
+				authorLogin: pr.author?.login ?? null,
+				updatedAt: pr.updatedAt ?? null,
+				checks,
+				checksStatus,
+			};
+		});
 }
 
 export const searchPullRequests = protectedProcedure
@@ -185,8 +255,24 @@ export const searchPullRequests = protectedProcedure
 				page,
 				limit,
 			);
+			let pullRequests = result.items;
+			try {
+				pullRequests = await ghListPullRequestsWithChecks(
+					ctx.execGh,
+					repo,
+					effectiveQuery,
+					input.includeClosed ?? false,
+					page,
+					limit,
+				);
+			} catch (checksError) {
+				console.warn(
+					"[workspaceCreation.searchPullRequests] failed to enrich checks",
+					checksError,
+				);
+			}
 			return {
-				pullRequests: result.items,
+				pullRequests,
 				totalCount: result.totalCount,
 				hasNextPage: result.hasNextPage,
 				page,
@@ -218,6 +304,9 @@ export const searchPullRequests = protectedProcedure
 							state,
 							isDraft: pr.draft ?? false,
 							authorLogin: pr.user?.login ?? null,
+							updatedAt: pr.updated_at ?? null,
+							checks: [],
+							checksStatus: "none",
 						},
 					],
 					totalCount: 1,
@@ -236,7 +325,7 @@ export const searchPullRequests = protectedProcedure
 				sort: "updated",
 				order: "desc",
 			});
-			const pullRequests = data.items
+			const pullRequests: PullRequestResult[] = data.items
 				.filter((item) => item.pull_request)
 				.map((item) => {
 					const state = normalizePullRequestState(
@@ -250,6 +339,9 @@ export const searchPullRequests = protectedProcedure
 						state,
 						isDraft: item.draft ?? false,
 						authorLogin: item.user?.login ?? null,
+						updatedAt: item.updated_at ?? null,
+						checks: [],
+						checksStatus: "none",
 					};
 				});
 			const hasNextPage = page * limit < data.total_count;

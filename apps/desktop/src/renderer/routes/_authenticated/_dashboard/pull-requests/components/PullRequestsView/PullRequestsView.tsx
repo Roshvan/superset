@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useProjectHost } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectHost";
+import { useProjectQueryTargets } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import {
 	pullRequestsSearchFromFilters,
 	usePullRequestsFilterStore,
@@ -10,38 +10,38 @@ import { PullRequestsTopBar } from "./components/PullRequestsTopBar";
 
 interface PullRequestsViewProps {
 	initialSearch?: string;
-	initialProject?: string;
+	initialProjects?: string[];
 	initialState?: "open" | "all";
 }
 
 export function PullRequestsView({
 	initialSearch,
-	initialProject,
+	initialProjects,
 	initialState,
 }: PullRequestsViewProps) {
 	const navigate = useNavigate();
 	const {
-		projectFilter: storedProjectFilter,
+		search: storedSearch,
+		projectFilters: storedProjectFilters,
 		includeClosed: storedIncludeClosed,
 		setSearch: storeSetSearch,
-		setProjectFilter: storeSetProjectFilter,
+		setProjectFilters: storeSetProjectFilters,
 		setIncludeClosed: storeSetIncludeClosed,
 	} = usePullRequestsFilterStore();
-	const [searchQuery, setSearchQuery] = useState(initialSearch ?? "");
-	const projectFilter = initialProject ?? storedProjectFilter;
+	const [searchQuery, setSearchQuery] = useState(initialSearch ?? storedSearch);
+	const projectFilters = initialProjects ?? storedProjectFilters;
 	const includeClosed =
 		initialState === undefined ? storedIncludeClosed : initialState === "all";
 	const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 	const {
-		hostId: projectHostId,
 		isReady: areProjectsReady,
-		project: selectedProject,
 		projects: hostProjects,
-	} = useProjectHost(projectFilter);
+		targets: projectTargets,
+	} = useProjectQueryTargets(projectFilters);
 
 	useEffect(() => {
-		setSearchQuery(initialSearch ?? "");
-	}, [initialSearch]);
+		setSearchQuery(initialSearch ?? storedSearch);
+	}, [initialSearch, storedSearch]);
 
 	useEffect(() => {
 		storeSetSearch(searchQuery);
@@ -50,16 +50,18 @@ export function PullRequestsView({
 	const buildSearch = useCallback(
 		(overrides: {
 			search?: string;
-			project?: string | null;
+			projects?: string[];
 			includeClosed?: boolean;
 		}) =>
 			pullRequestsSearchFromFilters({
 				search: overrides.search ?? searchQuery,
-				projectFilter:
-					overrides.project !== undefined ? overrides.project : projectFilter,
+				projectFilters:
+					overrides.projects !== undefined
+						? overrides.projects
+						: projectFilters,
 				includeClosed: overrides.includeClosed ?? includeClosed,
 			}),
-		[includeClosed, projectFilter, searchQuery],
+		[includeClosed, projectFilters, searchQuery],
 	);
 
 	const syncSearchToUrl = useCallback(
@@ -84,8 +86,8 @@ export function PullRequestsView({
 	);
 
 	useEffect(() => {
-		storeSetProjectFilter(projectFilter);
-	}, [projectFilter, storeSetProjectFilter]);
+		storeSetProjectFilters(projectFilters);
+	}, [projectFilters, storeSetProjectFilters]);
 
 	useEffect(() => {
 		storeSetIncludeClosed(includeClosed);
@@ -101,20 +103,18 @@ export function PullRequestsView({
 	);
 
 	useEffect(() => {
-		if (
-			projectFilter &&
-			projects.some((project) => project.id === projectFilter)
-		)
-			return;
 		if (!areProjectsReady) return;
-		const firstProject = projects[0];
-		if (!firstProject) return;
+		const availableIds = new Set(projects.map((project) => project.id));
+		const availableFilters = projectFilters.filter((projectId) =>
+			availableIds.has(projectId),
+		);
+		if (availableFilters.length === projectFilters.length) return;
 		navigate({
 			to: "/pull-requests",
-			search: buildSearch({ project: firstProject.id }),
+			search: buildSearch({ projects: availableFilters }),
 			replace: true,
 		});
-	}, [areProjectsReady, buildSearch, navigate, projectFilter, projects]);
+	}, [areProjectsReady, buildSearch, navigate, projectFilters, projects]);
 
 	const handleSearchChange = useCallback(
 		(query: string) => {
@@ -125,11 +125,11 @@ export function PullRequestsView({
 		[storeSetSearch, syncSearchToUrl],
 	);
 
-	const handleProjectFilterChange = (project: string) => {
-		storeSetProjectFilter(project);
+	const handleProjectFiltersChange = (projects: string[]) => {
+		storeSetProjectFilters(projects);
 		navigate({
 			to: "/pull-requests",
-			search: buildSearch({ project }),
+			search: buildSearch({ projects }),
 			replace: true,
 		});
 	};
@@ -151,15 +151,15 @@ export function PullRequestsView({
 			<PullRequestsTopBar
 				searchQuery={searchQuery}
 				onSearchChange={handleSearchChange}
-				projectFilter={projectFilter}
-				onProjectFilterChange={handleProjectFilterChange}
+				projectFilters={projectFilters}
+				onProjectFiltersChange={handleProjectFiltersChange}
 				includeClosed={includeClosed}
 				onIncludeClosedChange={handleIncludeClosedChange}
 			/>
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 				<PullRequestsContent
-					projectFilter={selectedProject?.projectKey ?? null}
-					hostId={projectHostId}
+					projectFilters={projectFilters}
+					projectTargets={projectTargets}
 					areProjectsReady={areProjectsReady}
 					hasProjects={projects.length > 0}
 					searchQuery={searchQuery}

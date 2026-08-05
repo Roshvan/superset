@@ -1,4 +1,5 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { parseProjectFilterParam } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { TasksView } from "./components/TasksView";
 import { Route as TasksLayoutRoute } from "./layout";
 
@@ -7,15 +8,23 @@ export const Route = createFileRoute("/_authenticated/_dashboard/tasks/")({
 });
 
 function TasksPage() {
-	const { tab, assignee, search, type, project, linearProject, state } =
-		TasksLayoutRoute.useSearch();
+	const {
+		tab,
+		assignee,
+		search,
+		type,
+		project,
+		projects,
+		linearProject,
+		state,
+	} = TasksLayoutRoute.useSearch();
 	if (type === "prs") {
 		return (
 			<Navigate
 				to="/pull-requests"
 				search={{
 					search,
-					project,
+					projects: projects ?? project,
 					state,
 				}}
 				replace
@@ -28,7 +37,13 @@ function TasksPage() {
 			initialAssignee={assignee}
 			initialSearch={search}
 			initialType={type}
-			initialProject={project}
+			initialProjects={
+				projects !== undefined
+					? parseProjectFilterParam(projects)
+					: project
+						? [project]
+						: undefined
+			}
 			initialLinearProject={linearProject}
 			initialState={state}
 		/>

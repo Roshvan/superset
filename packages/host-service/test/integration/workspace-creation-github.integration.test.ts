@@ -431,6 +431,29 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 				mergedAt: null,
 			};
 		}
+		if (args[0] === "pr" && args[1] === "list") {
+			return [
+				{
+					number: 101,
+					title: "search result",
+					url: "https://github.com/octocat/hello/pull/101",
+					state: "OPEN",
+					isDraft: false,
+					author: { login: "carol" },
+					mergedAt: null,
+					updatedAt: "2026-08-05T12:00:00Z",
+					statusCheckRollup: [
+						{
+							__typename: "CheckRun",
+							name: "Typecheck",
+							status: "COMPLETED",
+							conclusion: "SUCCESS",
+							detailsUrl: "https://github.com/octocat/hello/actions/1",
+						},
+					],
+				},
+			];
+		}
 		if (args[0] === "api" && args.includes("search/issues")) {
 			const qIndex = args.indexOf("-f");
 			const q = args[qIndex + 1] ?? "";
@@ -513,7 +536,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(result.pullRequests[0].prNumber).toBe(101);
 		expect(result.totalCount).toBe(1);
 		expect(result.hasNextPage).toBe(false);
-		expect(ghCalls).toHaveLength(1);
+		expect(ghCalls).toHaveLength(2);
 		const args = ghCalls[0].args;
 		expect(args[0]).toBe("api");
 		expect(args).toContain("search/issues");
@@ -522,6 +545,13 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(qArg).toContain("is:pr");
 		expect(qArg).toContain("is:open");
 		expect(qArg).toContain("find me");
+		expect(ghCalls[1].args.slice(0, 4)).toEqual([
+			"pr",
+			"list",
+			"--repo",
+			"octocat/hello",
+		]);
+		expect(result.pullRequests[0].checksStatus).toBe("success");
 	});
 
 	test("searchGitHubIssues #N filters out PRs leaked by `gh issue view`", async () => {

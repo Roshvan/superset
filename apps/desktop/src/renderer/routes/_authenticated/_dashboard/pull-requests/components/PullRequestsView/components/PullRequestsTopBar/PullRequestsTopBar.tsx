@@ -5,8 +5,8 @@ import { WorkItemsSearch } from "renderer/routes/_authenticated/_dashboard/compo
 interface PullRequestsTopBarProps {
 	searchQuery: string;
 	onSearchChange: (query: string) => void;
-	projectFilter: string | null;
-	onProjectFilterChange: (projectId: string) => void;
+	projectFilters: string[];
+	onProjectFiltersChange: (projectIds: string[]) => void;
 	includeClosed: boolean;
 	onIncludeClosedChange: (includeClosed: boolean) => void;
 }
@@ -14,8 +14,8 @@ interface PullRequestsTopBarProps {
 export function PullRequestsTopBar({
 	searchQuery,
 	onSearchChange,
-	projectFilter,
-	onProjectFilterChange,
+	projectFilters,
+	onProjectFiltersChange,
 	includeClosed,
 	onIncludeClosedChange,
 }: PullRequestsTopBarProps) {
@@ -29,8 +29,8 @@ export function PullRequestsTopBar({
 					<div className="flex items-center gap-2">
 						<span className="text-xs text-muted-foreground">Repository</span>
 						<ProjectFilter
-							value={projectFilter}
-							onChange={onProjectFilterChange}
+							value={projectFilters}
+							onChange={onProjectFiltersChange}
 						/>
 					</div>
 					<div className="h-4 w-px shrink-0 bg-border" />

@@ -434,8 +434,19 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		if (args[0] === "pr" && args[1] === "list") {
 			return [
 				{
+					number: 999,
+					title: "Different search result",
+					url: "https://github.com/octocat/hello/pull/999",
+					state: "OPEN",
+					isDraft: false,
+					author: { login: "mallory" },
+					mergedAt: null,
+					updatedAt: "2026-08-05T13:00:00Z",
+					statusCheckRollup: [],
+				},
+				{
 					number: 101,
-					title: "search result",
+					title: "stale list title",
 					url: "https://github.com/octocat/hello/pull/101",
 					state: "OPEN",
 					isDraft: false,
@@ -534,6 +545,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(101);
+		expect(result.pullRequests[0].title).toBe("search result");
 		expect(result.totalCount).toBe(1);
 		expect(result.hasNextPage).toBe(false);
 		expect(ghCalls).toHaveLength(2);
@@ -551,6 +563,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 			"--repo",
 			"octocat/hello",
 		]);
+		expect(ghCalls[1].args).toContain("find me sort:updated-desc");
 		expect(result.pullRequests[0].checksStatus).toBe("success");
 	});
 

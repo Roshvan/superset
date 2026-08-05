@@ -175,7 +175,7 @@ async function ghListPullRequestsWithChecks(
 	includeClosed: boolean,
 	page: number,
 	perPage: number,
-): Promise<PullRequestResult[]> {
+): Promise<Map<number, Pick<PullRequestResult, "checks" | "checksStatus">>> {
 	const limit = page * perPage;
 	const args = [
 		"pr",
@@ -189,27 +189,19 @@ async function ghListPullRequestsWithChecks(
 		"--json",
 		PR_VIEW_FIELDS,
 	];
-	if (query) args.push("--search", `${query} sort:updated-desc`);
+	args.push("--search", `${query} sort:updated-desc`.trim());
 	const raw = await execGh(args, { cwd: repo.repoPath ?? undefined });
-	return ghPrListSchema
-		.parse(raw)
-		.slice((page - 1) * perPage, page * perPage)
-		.map((pr) => {
-			const { checks, checksStatus } = normalizePullRequestChecks(
-				pr.statusCheckRollup,
-			);
-			return {
-				prNumber: pr.number,
-				title: pr.title,
-				url: pr.url,
-				state: normalizePullRequestState(pr.state, pr.mergedAt),
-				isDraft: pr.isDraft ?? false,
-				authorLogin: pr.author?.login ?? null,
-				updatedAt: pr.updatedAt ?? null,
-				checks,
-				checksStatus,
-			};
-		});
+	return new Map(
+		ghPrListSchema
+			.parse(raw)
+			.slice((page - 1) * perPage, page * perPage)
+			.map((pr) => {
+				const { checks, checksStatus } = normalizePullRequestChecks(
+					pr.statusCheckRollup,
+				);
+				return [pr.number, { checks, checksStatus }] as const;
+			}),
+	);
 }
 
 export const searchPullRequests = protectedProcedure
@@ -257,7 +249,7 @@ export const searchPullRequests = protectedProcedure
 			);
 			let pullRequests = result.items;
 			try {
-				pullRequests = await ghListPullRequestsWithChecks(
+				const checksByPullRequest = await ghListPullRequestsWithChecks(
 					ctx.execGh,
 					repo,
 					effectiveQuery,
@@ -265,6 +257,10 @@ export const searchPullRequests = protectedProcedure
 					page,
 					limit,
 				);
+				pullRequests = result.items.map((pullRequest) => ({
+					...pullRequest,
+					...checksByPullRequest.get(pullRequest.prNumber),
+				}));
 			} catch (checksError) {
 				console.warn(
 					"[workspaceCreation.searchPullRequests] failed to enrich checks",

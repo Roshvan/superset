@@ -433,6 +433,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 			};
 		}
 		if (args[0] === "api" && args[1] === "graphql") {
+			const isNextChecksPage = args.includes("cursor101=checks-page-2");
 			return {
 				data: {
 					repository: {
@@ -440,12 +441,16 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 							number: 101,
 							statusCheckRollup: {
 								contexts: {
+									pageInfo: {
+										hasNextPage: !isNextChecksPage,
+										endCursor: isNextChecksPage ? null : "checks-page-2",
+									},
 									nodes: [
 										{
 											__typename: "CheckRun",
-											name: "Typecheck",
+											name: isNextChecksPage ? "Tests" : "Typecheck",
 											status: "COMPLETED",
-											conclusion: "SUCCESS",
+											conclusion: isNextChecksPage ? "FAILURE" : "SUCCESS",
 											detailsUrl: "https://github.com/octocat/hello/actions/1",
 										},
 									],
@@ -541,7 +546,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(result.pullRequests[0].title).toBe("search result");
 		expect(result.totalCount).toBe(1);
 		expect(result.hasNextPage).toBe(false);
-		expect(ghCalls).toHaveLength(2);
+		expect(ghCalls).toHaveLength(3);
 		const args = ghCalls[0].args;
 		expect(args[0]).toBe("api");
 		expect(args).toContain("search/issues");
@@ -559,7 +564,12 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 			const variableIndex = ghCalls[1].args.indexOf(variable);
 			expect(ghCalls[1].args[variableIndex - 1]).toBe("-f");
 		}
-		expect(result.pullRequests[0].checksStatus).toBe("success");
+		expect(ghCalls[2].args).toContain("cursor101=checks-page-2");
+		expect(ghCalls[2].args.join(" ")).toContain(
+			"contexts(first: 100, after: $cursor101)",
+		);
+		expect(result.pullRequests[0].checks).toHaveLength(2);
+		expect(result.pullRequests[0].checksStatus).toBe("failure");
 	});
 
 	test("searchGitHubIssues #N filters out PRs leaked by `gh issue view`", async () => {

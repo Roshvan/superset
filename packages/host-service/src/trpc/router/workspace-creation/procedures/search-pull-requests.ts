@@ -181,6 +181,10 @@ const ghChecksGraphqlResponseSchema = z.object({
 							.object({
 								contexts: z.object({
 									nodes: z.array(pullRequestCheckContextSchema.nullable()),
+									pageInfo: z.object({
+										hasNextPage: z.boolean(),
+										endCursor: z.string().nullable(),
+									}),
 								}),
 							})
 							.nullable()
@@ -198,12 +202,27 @@ async function ghGetPullRequestChecks(
 	pullRequestNumbers: number[],
 ): Promise<Map<number, Pick<PullRequestResult, "checks" | "checksStatus">>> {
 	if (pullRequestNumbers.length === 0) return new Map();
-	const selections = pullRequestNumbers
-		.map(
-			(number) => `pr${number}:pullRequest(number:${number}) {
+	const contextsByPullRequest = new Map<
+		number,
+		z.infer<typeof pullRequestCheckContextSchema>[]
+	>();
+	let cursors = new Map<number, string | null>(
+		pullRequestNumbers.map((number) => [number, null]),
+	);
+
+	while (cursors.size > 0) {
+		const cursorDefinitions = [...cursors]
+			.flatMap(([number, cursor]) =>
+				cursor ? [`$cursor${number}: String!`] : [],
+			)
+			.join(", ");
+		const selections = [...cursors]
+			.map(
+				([number, cursor]) => `pr${number}:pullRequest(number:${number}) {
 				number
 				statusCheckRollup {
-					contexts(first: 100) {
+					contexts(first: 100${cursor ? `, after: $cursor${number}` : ""}) {
+						pageInfo { hasNextPage endCursor }
 						nodes {
 							__typename
 							... on CheckRun {
@@ -224,39 +243,66 @@ async function ghGetPullRequestChecks(
 					}
 				}
 			}`,
-		)
-		.join("\n");
-	const query = `query($owner: String!, $name: String!) {
+			)
+			.join("\n");
+		const query = `query($owner: String!, $name: String!${cursorDefinitions ? `, ${cursorDefinitions}` : ""}) {
 		repository(owner: $owner, name: $name) {
 			${selections}
 		}
 	}`;
-	const raw = await execGh(
-		[
-			"api",
-			"graphql",
-			"-f",
-			`query=${query}`,
-			"-f",
-			`owner=${repo.owner}`,
-			"-f",
-			`name=${repo.name}`,
-		],
-		{ cwd: repo.repoPath ?? undefined },
-	);
-	const repository = ghChecksGraphqlResponseSchema.parse(raw).data.repository;
-	if (!repository) return new Map();
+		const cursorArgs = [...cursors].flatMap(([number, cursor]) =>
+			cursor ? ["-f", `cursor${number}=${cursor}`] : [],
+		);
+		const raw = await execGh(
+			[
+				"api",
+				"graphql",
+				"-f",
+				`query=${query}`,
+				"-f",
+				`owner=${repo.owner}`,
+				"-f",
+				`name=${repo.name}`,
+				...cursorArgs,
+			],
+			{ cwd: repo.repoPath ?? undefined },
+		);
+		const repository = ghChecksGraphqlResponseSchema.parse(raw).data.repository;
+		if (!repository) return new Map();
 
-	return new Map(
-		Object.values(repository).flatMap((pullRequest) => {
-			if (!pullRequest) return [];
+		const nextCursors = new Map<number, string | null>();
+		for (const pullRequest of Object.values(repository)) {
+			if (!pullRequest) continue;
 			const contexts =
 				pullRequest.statusCheckRollup?.contexts.nodes.filter(
 					(context): context is z.infer<typeof pullRequestCheckContextSchema> =>
 						context !== null,
 				) ?? [];
+			const existing = contextsByPullRequest.get(pullRequest.number) ?? [];
+			contextsByPullRequest.set(pullRequest.number, [...existing, ...contexts]);
+			const pageInfo = pullRequest.statusCheckRollup?.contexts.pageInfo;
+			if (pageInfo?.hasNextPage) {
+				if (!pageInfo.endCursor) {
+					throw new Error(
+						`Missing check-rollup cursor for PR #${pullRequest.number}`,
+					);
+				}
+				if (pageInfo.endCursor === cursors.get(pullRequest.number)) {
+					throw new Error(
+						`Check-rollup cursor did not advance for PR #${pullRequest.number}`,
+					);
+				}
+				nextCursors.set(pullRequest.number, pageInfo.endCursor);
+			}
+		}
+		cursors = nextCursors;
+	}
+
+	return new Map(
+		pullRequestNumbers.map((pullRequestNumber) => {
+			const contexts = contextsByPullRequest.get(pullRequestNumber) ?? [];
 			const { checks, checksStatus } = normalizePullRequestChecks(contexts);
-			return [[pullRequest.number, { checks, checksStatus }] as const];
+			return [pullRequestNumber, { checks, checksStatus }] as const;
 		}),
 	);
 }

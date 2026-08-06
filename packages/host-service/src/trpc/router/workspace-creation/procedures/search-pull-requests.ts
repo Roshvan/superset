@@ -69,6 +69,9 @@ const REVIEW_QUERY_BY_FILTER: Record<PullRequestReviewFilter, string> = {
 	"team-review-requested": "review-requested:@me",
 };
 
+const GITHUB_SEARCH_PER_PAGE = 100;
+const GITHUB_SEARCH_RESULT_LIMIT = 1_000;
+
 const searchPullRequestsInputSchema = githubSearchInputSchema.extend({
 	author: githubAuthorSchema.optional(),
 	review: pullRequestReviewFilterSchema.optional(),
@@ -221,7 +224,8 @@ async function ghApiSearchPullRequests(
 			checks: [],
 			checksStatus: "none",
 		}));
-	const hasNextPage = page * perPage < parsed.total_count;
+	const hasNextPage =
+		page * perPage < Math.min(parsed.total_count, GITHUB_SEARCH_RESULT_LIMIT);
 	return { items, totalCount: parsed.total_count, hasNextPage };
 }
 
@@ -397,20 +401,27 @@ export const searchPullRequests = protectedProcedure
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
 				if (input.review) {
-					const reviewMatches = await ghApiSearchPullRequests(
-						ctx.execGh,
-						repo,
-						effectiveQuery,
-						true,
-						1,
-						100,
-					);
-					if (
-						!reviewMatches.items.some(
-							(pullRequest) => pullRequest.prNumber === prNumber,
-						)
-					) {
-						return emptyPullRequestsPage(page);
+					let reviewPage = 1;
+					while (true) {
+						const reviewMatches = await ghApiSearchPullRequests(
+							ctx.execGh,
+							repo,
+							effectiveQuery,
+							true,
+							reviewPage,
+							GITHUB_SEARCH_PER_PAGE,
+						);
+						if (
+							reviewMatches.items.some(
+								(pullRequest) => pullRequest.prNumber === prNumber,
+							)
+						) {
+							break;
+						}
+						if (!reviewMatches.hasNextPage) {
+							return emptyPullRequestsPage(page);
+						}
+						reviewPage += 1;
 					}
 				}
 				const pr = await ghDirectLookup(ctx.execGh, repo, prNumber);
@@ -468,17 +479,27 @@ export const searchPullRequests = protectedProcedure
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
 				if (input.review) {
-					const { data } = await octokit.search.issuesAndPullRequests({
-						q: `repo:${repo.owner}/${repo.name} is:pr ${effectiveQuery}`,
-						per_page: 100,
-						page: 1,
-					});
-					if (
-						!data.items.some(
-							(item) => !!item.pull_request && item.number === prNumber,
-						)
-					) {
-						return emptyPullRequestsPage(page);
+					let reviewPage = 1;
+					while (true) {
+						const { data } = await octokit.search.issuesAndPullRequests({
+							q: `repo:${repo.owner}/${repo.name} is:pr ${effectiveQuery}`,
+							per_page: GITHUB_SEARCH_PER_PAGE,
+							page: reviewPage,
+						});
+						if (
+							data.items.some(
+								(item) => !!item.pull_request && item.number === prNumber,
+							)
+						) {
+							break;
+						}
+						if (
+							reviewPage * GITHUB_SEARCH_PER_PAGE >=
+							Math.min(data.total_count, GITHUB_SEARCH_RESULT_LIMIT)
+						) {
+							return emptyPullRequestsPage(page);
+						}
+						reviewPage += 1;
 					}
 				}
 				const { data: pr } = await octokit.pulls.get({

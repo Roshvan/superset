@@ -79,6 +79,27 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		search: {
 			issuesAndPullRequests: async (args: unknown) => {
 				calls.push({ method: "search.issuesAndPullRequests", args });
+				const searchArgs = args as { page?: number; q: string };
+				if (searchArgs.q.includes("review:required")) {
+					const isSecondPage = searchArgs.page === 2;
+					return {
+						data: {
+							total_count: 101,
+							items: [
+								{
+									number: isSecondPage ? 33 : 7,
+									title: isSecondPage ? "PR #33" : "search hit",
+									html_url: isSecondPage
+										? "https://github.com/octocat/hello/pull/33"
+										: "https://github.com/octocat/hello/issues/7",
+									state: "open",
+									user: { login: isSecondPage ? "bob" : "carol" },
+									pull_request: isSecondPage ? { merged_at: null } : undefined,
+								},
+							],
+						},
+					};
+				}
 				return {
 					data: {
 						total_count: 1,
@@ -187,19 +208,24 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		expect(calls).toHaveLength(0);
 	});
 
-	test("searchPullRequests applies review filters to direct lookups", async () => {
+	test("searchPullRequests pages review filters for direct lookups", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "#33",
 			review: "required",
 		});
-		expect(result.pullRequests).toEqual([]);
-		expect(result.totalCount).toBe(0);
-		expect(calls).toHaveLength(1);
+		expect(result.pullRequests).toHaveLength(1);
+		expect(result.pullRequests[0].prNumber).toBe(33);
+		expect(calls).toHaveLength(3);
 		expect(calls[0]).toMatchObject({
 			method: "search.issuesAndPullRequests",
-			args: { q: expect.stringContaining("review:required") },
+			args: { page: 1, q: expect.stringContaining("review:required") },
 		});
+		expect(calls[1]).toMatchObject({
+			method: "search.issuesAndPullRequests",
+			args: { page: 2, q: expect.stringContaining("review:required") },
+		});
+		expect(calls[2].method).toBe("pulls.get");
 	});
 
 	test("searchPullRequests filters search results to PRs only", async () => {
@@ -506,17 +532,24 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		if (args[0] === "api" && args.includes("search/issues")) {
 			const qIndex = args.indexOf("-f");
 			const q = args[qIndex + 1] ?? "";
+			const pageArg = args.find((arg) => arg.startsWith("page="));
+			const searchPage = Number.parseInt(
+				pageArg?.slice("page=".length) ?? "1",
+				10,
+			);
 			const isPr = q.includes("is:pr");
 			if (isPr) {
 				const isDirectReviewLookup =
 					q.includes("33") && q.includes("review:required");
+				const foundDirectReviewLookup =
+					isDirectReviewLookup && searchPage === 2;
 				return {
-					total_count: 1,
+					total_count: isDirectReviewLookup ? 101 : 1,
 					items: [
 						{
-							number: isDirectReviewLookup ? 33 : 101,
-							title: isDirectReviewLookup ? "PR via gh" : "search result",
-							html_url: `https://github.com/octocat/hello/pull/${isDirectReviewLookup ? 33 : 101}`,
+							number: foundDirectReviewLookup ? 33 : 101,
+							title: foundDirectReviewLookup ? "PR via gh" : "search result",
+							html_url: `https://github.com/octocat/hello/pull/${foundDirectReviewLookup ? 33 : 101}`,
 							state: "open",
 							user: { login: "carol" },
 							pull_request: { merged_at: null },
@@ -600,9 +633,12 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(33);
-		expect(ghCalls).toHaveLength(2);
+		expect(ghCalls).toHaveLength(3);
 		expect(ghCalls[0].args.join(" ")).toContain("review:required");
-		expect(ghCalls[1].args.slice(0, 3)).toEqual(["pr", "view", "33"]);
+		expect(ghCalls[0].args).toContain("page=1");
+		expect(ghCalls[1].args.join(" ")).toContain("review:required");
+		expect(ghCalls[1].args).toContain("page=2");
+		expect(ghCalls[2].args.slice(0, 3)).toEqual(["pr", "view", "33"]);
 	});
 
 	test("searchPullRequests free-text invokes `gh api search/issues` with is:pr filter", async () => {

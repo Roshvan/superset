@@ -80,21 +80,26 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 			issuesAndPullRequests: async (args: unknown) => {
 				calls.push({ method: "search.issuesAndPullRequests", args });
 				const searchArgs = args as { page?: number; q: string };
-				if (searchArgs.q.includes("review:required")) {
+				if (
+					searchArgs.q.includes("review:required") ||
+					searchArgs.q.includes("review:none")
+				) {
 					const isSecondPage = searchArgs.page === 2;
+					const isMatch =
+						searchArgs.q.includes("review:required") && isSecondPage;
 					return {
 						data: {
 							total_count: 101,
 							items: [
 								{
-									number: isSecondPage ? 33 : 7,
-									title: isSecondPage ? "PR #33" : "search hit",
-									html_url: isSecondPage
+									number: isMatch ? 33 : 7,
+									title: isMatch ? "PR #33" : "search hit",
+									html_url: isMatch
 										? "https://github.com/octocat/hello/pull/33"
 										: "https://github.com/octocat/hello/issues/7",
 									state: "open",
-									user: { login: isSecondPage ? "bob" : "carol" },
-									pull_request: isSecondPage ? { merged_at: null } : undefined,
+									user: { login: isMatch ? "bob" : "carol" },
+									pull_request: isMatch ? { merged_at: null } : undefined,
 								},
 							],
 						},
@@ -226,6 +231,25 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 			args: { page: 2, q: expect.stringContaining("review:required") },
 		});
 		expect(calls[2].method).toBe("pulls.get");
+	});
+
+	test("searchPullRequests stops after exhausting Octokit review pages", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			review: "none",
+		});
+		expect(result.pullRequests).toEqual([]);
+		expect(result.totalCount).toBe(0);
+		expect(calls).toHaveLength(2);
+		expect(calls[0]).toMatchObject({
+			method: "search.issuesAndPullRequests",
+			args: { page: 1, q: expect.stringContaining("review:none") },
+		});
+		expect(calls[1]).toMatchObject({
+			method: "search.issuesAndPullRequests",
+			args: { page: 2, q: expect.stringContaining("review:none") },
+		});
 	});
 
 	test("searchPullRequests filters search results to PRs only", async () => {
@@ -540,9 +564,10 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 			const isPr = q.includes("is:pr");
 			if (isPr) {
 				const isDirectReviewLookup =
-					q.includes("33") && q.includes("review:required");
+					q.includes("33") &&
+					(q.includes("review:required") || q.includes("review:none"));
 				const foundDirectReviewLookup =
-					isDirectReviewLookup && searchPage === 2;
+					q.includes("review:required") && searchPage === 2;
 				return {
 					total_count: isDirectReviewLookup ? 101 : 1,
 					items: [
@@ -639,6 +664,21 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(ghCalls[1].args.join(" ")).toContain("review:required");
 		expect(ghCalls[1].args).toContain("page=2");
 		expect(ghCalls[2].args.slice(0, 3)).toEqual(["pr", "view", "33"]);
+	});
+
+	test("searchPullRequests stops after exhausting gh review pages", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			review: "none",
+		});
+		expect(result.pullRequests).toEqual([]);
+		expect(result.totalCount).toBe(0);
+		expect(ghCalls).toHaveLength(2);
+		expect(ghCalls[0].args.join(" ")).toContain("review:none");
+		expect(ghCalls[0].args).toContain("page=1");
+		expect(ghCalls[1].args.join(" ")).toContain("review:none");
+		expect(ghCalls[1].args).toContain("page=2");
 	});
 
 	test("searchPullRequests free-text invokes `gh api search/issues` with is:pr filter", async () => {

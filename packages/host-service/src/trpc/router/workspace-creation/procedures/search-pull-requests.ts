@@ -72,6 +72,29 @@ const REVIEW_QUERY_BY_FILTER: Record<PullRequestReviewFilter, string> = {
 const GITHUB_SEARCH_PER_PAGE = 100;
 const GITHUB_SEARCH_RESULT_LIMIT = 1_000;
 
+interface DirectReviewSearchPage {
+	pullRequestNumbers: number[];
+	totalCount: number;
+}
+
+async function directLookupMatchesReviewFilter(
+	pullRequestNumber: number,
+	searchPage: (page: number) => Promise<DirectReviewSearchPage>,
+): Promise<boolean> {
+	let page = 1;
+	while (true) {
+		const result = await searchPage(page);
+		if (result.pullRequestNumbers.includes(pullRequestNumber)) return true;
+		if (
+			page * GITHUB_SEARCH_PER_PAGE >=
+			Math.min(result.totalCount, GITHUB_SEARCH_RESULT_LIMIT)
+		) {
+			return false;
+		}
+		page += 1;
+	}
+}
+
 const searchPullRequestsInputSchema = githubSearchInputSchema.extend({
 	author: githubAuthorSchema.optional(),
 	review: pullRequestReviewFilterSchema.optional(),
@@ -400,29 +423,29 @@ export const searchPullRequests = protectedProcedure
 		try {
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
-				if (input.review) {
-					let reviewPage = 1;
-					while (true) {
-						const reviewMatches = await ghApiSearchPullRequests(
-							ctx.execGh,
-							repo,
-							effectiveQuery,
-							true,
-							reviewPage,
-							GITHUB_SEARCH_PER_PAGE,
-						);
-						if (
-							reviewMatches.items.some(
-								(pullRequest) => pullRequest.prNumber === prNumber,
-							)
-						) {
-							break;
-						}
-						if (!reviewMatches.hasNextPage) {
-							return emptyPullRequestsPage(page);
-						}
-						reviewPage += 1;
-					}
+				if (
+					input.review &&
+					!(await directLookupMatchesReviewFilter(
+						prNumber,
+						async (reviewPage) => {
+							const reviewMatches = await ghApiSearchPullRequests(
+								ctx.execGh,
+								repo,
+								effectiveQuery,
+								true,
+								reviewPage,
+								GITHUB_SEARCH_PER_PAGE,
+							);
+							return {
+								pullRequestNumbers: reviewMatches.items.map(
+									(pullRequest) => pullRequest.prNumber,
+								),
+								totalCount: reviewMatches.totalCount,
+							};
+						},
+					))
+				) {
+					return emptyPullRequestsPage(page);
 				}
 				const pr = await ghDirectLookup(ctx.execGh, repo, prNumber);
 				if (!matchesAuthor(pr.authorLogin, input.author)) {
@@ -478,29 +501,26 @@ export const searchPullRequests = protectedProcedure
 		try {
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
-				if (input.review) {
-					let reviewPage = 1;
-					while (true) {
-						const { data } = await octokit.search.issuesAndPullRequests({
-							q: `repo:${repo.owner}/${repo.name} is:pr ${effectiveQuery}`,
-							per_page: GITHUB_SEARCH_PER_PAGE,
-							page: reviewPage,
-						});
-						if (
-							data.items.some(
-								(item) => !!item.pull_request && item.number === prNumber,
-							)
-						) {
-							break;
-						}
-						if (
-							reviewPage * GITHUB_SEARCH_PER_PAGE >=
-							Math.min(data.total_count, GITHUB_SEARCH_RESULT_LIMIT)
-						) {
-							return emptyPullRequestsPage(page);
-						}
-						reviewPage += 1;
-					}
+				if (
+					input.review &&
+					!(await directLookupMatchesReviewFilter(
+						prNumber,
+						async (reviewPage) => {
+							const { data } = await octokit.search.issuesAndPullRequests({
+								q: `repo:${repo.owner}/${repo.name} is:pr ${effectiveQuery}`,
+								per_page: GITHUB_SEARCH_PER_PAGE,
+								page: reviewPage,
+							});
+							return {
+								pullRequestNumbers: data.items
+									.filter((item) => !!item.pull_request)
+									.map((item) => item.number),
+								totalCount: data.total_count,
+							};
+						},
+					))
+				) {
+					return emptyPullRequestsPage(page);
 				}
 				const { data: pr } = await octokit.pulls.get({
 					owner: repo.owner,

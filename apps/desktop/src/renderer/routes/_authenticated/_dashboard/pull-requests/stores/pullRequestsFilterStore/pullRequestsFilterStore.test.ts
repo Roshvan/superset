@@ -11,6 +11,7 @@ describe("pullRequestsSearchFromFilters", () => {
 				search: "",
 				projectFilters: [],
 				authorFilter: null,
+				reviewFilter: null,
 				includeClosed: false,
 			}),
 		).toEqual({});
@@ -22,12 +23,14 @@ describe("pullRequestsSearchFromFilters", () => {
 				search: "remote host",
 				projectFilters: ["project-1", "project-2"],
 				authorFilter: "octocat",
+				reviewFilter: "changes-requested",
 				includeClosed: true,
 			}),
 		).toEqual({
 			search: "remote host",
 			projects: "project-1,project-2",
 			author: "octocat",
+			review: "changes-requested",
 			state: "all",
 		});
 	});
@@ -39,10 +42,12 @@ describe("migratePullRequestsFilterState", () => {
 			migratePullRequestsFilterState({
 				projectFilter: "project-1",
 				authorFilter: " @octocat ",
+				reviewFilter: "approved",
 			}),
 		).toMatchObject({
 			projectFilters: ["project-1"],
 			authorFilter: "octocat",
+			reviewFilter: "approved",
 		});
 	});
 
@@ -51,16 +56,19 @@ describe("migratePullRequestsFilterState", () => {
 			migratePullRequestsFilterState({
 				projectFilters: ["project-1", 42, "project-1"],
 				authorFilter: "octocat author:someone-else",
+				reviewFilter: "review:approved",
 				includeClosed: "true",
 			}),
 		).toMatchObject({
 			projectFilters: ["project-1"],
 			authorFilter: null,
+			reviewFilter: null,
 			includeClosed: false,
 		});
 		expect(migratePullRequestsFilterState(null)).toMatchObject({
 			projectFilters: [],
 			authorFilter: null,
+			reviewFilter: null,
 			includeClosed: false,
 		});
 	});

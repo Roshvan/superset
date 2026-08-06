@@ -187,18 +187,34 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		expect(calls).toHaveLength(0);
 	});
 
+	test("searchPullRequests applies review filters to direct lookups", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			review: "required",
+		});
+		expect(result.pullRequests).toEqual([]);
+		expect(result.totalCount).toBe(0);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({
+			method: "search.issuesAndPullRequests",
+			args: { q: expect.stringContaining("review:required") },
+		});
+	});
+
 	test("searchPullRequests filters search results to PRs only", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "find me",
 			author: "carol",
+			review: "approved",
 		});
 		// Our fake search returns one issue (no `pull_request`), so no PRs.
 		expect(result.pullRequests).toEqual([]);
 		expect(calls[0].method).toBe("search.issuesAndPullRequests");
-		expect(calls[0].args).toMatchObject({
-			q: expect.stringContaining("author:carol"),
-		});
+		const searchArgs = calls[0].args as { q: string };
+		expect(searchArgs.q).toContain("author:carol");
+		expect(searchArgs.q).toContain("review:approved");
 	});
 });
 
@@ -492,13 +508,15 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 			const q = args[qIndex + 1] ?? "";
 			const isPr = q.includes("is:pr");
 			if (isPr) {
+				const isDirectReviewLookup =
+					q.includes("33") && q.includes("review:required");
 				return {
 					total_count: 1,
 					items: [
 						{
-							number: 101,
-							title: "search result",
-							html_url: "https://github.com/octocat/hello/pull/101",
+							number: isDirectReviewLookup ? 33 : 101,
+							title: isDirectReviewLookup ? "PR via gh" : "search result",
+							html_url: `https://github.com/octocat/hello/pull/${isDirectReviewLookup ? 33 : 101}`,
 							state: "open",
 							user: { login: "carol" },
 							pull_request: { merged_at: null },
@@ -574,11 +592,25 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(ghCalls).toHaveLength(1);
 	});
 
+	test("searchPullRequests applies review filters to gh direct lookups", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			review: "required",
+		});
+		expect(result.pullRequests).toHaveLength(1);
+		expect(result.pullRequests[0].prNumber).toBe(33);
+		expect(ghCalls).toHaveLength(2);
+		expect(ghCalls[0].args.join(" ")).toContain("review:required");
+		expect(ghCalls[1].args.slice(0, 3)).toEqual(["pr", "view", "33"]);
+	});
+
 	test("searchPullRequests free-text invokes `gh api search/issues` with is:pr filter", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "find me",
 			author: "carol",
+			review: "team-review-requested",
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(101);
@@ -595,6 +627,8 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(qArg).toContain("is:open");
 		expect(qArg).toContain("find me");
 		expect(qArg).toContain("author:carol");
+		expect(qArg).toContain("review-requested:@me");
+		expect(qArg).not.toContain("team-review-requested:@me");
 		expect(ghCalls[1].args.slice(0, 2)).toEqual(["api", "graphql"]);
 		expect(ghCalls[1].args.join(" ")).toContain("pullRequest(number:101)");
 		expect(ghCalls[1].args.join(" ")).not.toContain("pullRequest(number:999)");
@@ -610,6 +644,19 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		);
 		expect(result.pullRequests[0].checks).toHaveLength(2);
 		expect(result.pullRequests[0].checksStatus).toBe("failure");
+	});
+
+	test("searchPullRequests distinguishes individual review requests", async () => {
+		await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "find me",
+			review: "review-requested",
+		});
+		const searchCall = ghCalls.find(
+			(call) => call.args[0] === "api" && call.args.includes("search/issues"),
+		);
+		expect(searchCall).toBeDefined();
+		expect(searchCall?.args.join(" ")).toContain("user-review-requested:@me");
 	});
 
 	test("searchGitHubIssues #N filters out PRs leaked by `gh issue view`", async () => {

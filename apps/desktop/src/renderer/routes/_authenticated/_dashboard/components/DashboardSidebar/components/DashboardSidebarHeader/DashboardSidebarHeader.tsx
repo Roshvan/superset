@@ -125,6 +125,7 @@ export function DashboardSidebarHeader({
 		search: lastPullRequestsSearch,
 		projectFilters: lastPullRequestsProjectFilters,
 		authorFilter: lastPullRequestsAuthorFilter,
+		reviewFilter: lastPullRequestsReviewFilter,
 		includeClosed: lastPullRequestsIncludeClosed,
 	} = usePullRequestsFilterStore();
 
@@ -161,6 +162,7 @@ export function DashboardSidebarHeader({
 					search: lastPullRequestsSearch,
 					projectFilters: lastPullRequestsProjectFilters,
 					authorFilter: lastPullRequestsAuthorFilter,
+					reviewFilter: lastPullRequestsReviewFilter,
 					includeClosed: lastPullRequestsIncludeClosed,
 				}),
 			});

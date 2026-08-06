@@ -3,6 +3,10 @@ import {
 	serializeProjectFilters,
 } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { normalizeAuthorFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/normalizeAuthorFilter";
+import {
+	normalizePullRequestReviewFilter,
+	type PullRequestReviewFilter,
+} from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/pullRequestReviewFilter";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -10,16 +14,18 @@ interface PullRequestsFilterState {
 	search: string;
 	projectFilters: string[];
 	authorFilter: string | null;
+	reviewFilter: PullRequestReviewFilter | null;
 	includeClosed: boolean;
 	setSearch: (search: string) => void;
 	setProjectFilters: (projectFilters: string[]) => void;
 	setAuthorFilter: (authorFilter: string | null) => void;
+	setReviewFilter: (reviewFilter: PullRequestReviewFilter | null) => void;
 	setIncludeClosed: (includeClosed: boolean) => void;
 }
 
 type PersistedPullRequestsFilterState = Pick<
 	PullRequestsFilterState,
-	"projectFilters" | "authorFilter" | "includeClosed"
+	"projectFilters" | "authorFilter" | "reviewFilter" | "includeClosed"
 >;
 
 export function migratePullRequestsFilterState(
@@ -36,6 +42,7 @@ export function migratePullRequestsFilterState(
 			state.projectFilters ?? (legacyProject ? [legacyProject] : []),
 		),
 		authorFilter: normalizeAuthorFilter(state.authorFilter),
+		reviewFilter: normalizePullRequestReviewFilter(state.reviewFilter),
 		includeClosed: state.includeClosed === true,
 	};
 }
@@ -46,21 +53,27 @@ export const usePullRequestsFilterStore = create<PullRequestsFilterState>()(
 			search: "",
 			projectFilters: [],
 			authorFilter: null,
+			reviewFilter: null,
 			includeClosed: false,
 			setSearch: (search) => set({ search }),
 			setProjectFilters: (projectFilters) =>
 				set({ projectFilters: normalizeProjectFilters(projectFilters) }),
 			setAuthorFilter: (authorFilter) =>
 				set({ authorFilter: normalizeAuthorFilter(authorFilter) }),
+			setReviewFilter: (reviewFilter) =>
+				set({
+					reviewFilter: normalizePullRequestReviewFilter(reviewFilter),
+				}),
 			setIncludeClosed: (includeClosed) => set({ includeClosed }),
 		}),
 		{
 			name: "pull-requests-filter-state",
-			version: 3,
+			version: 4,
 			migrate: migratePullRequestsFilterState,
 			partialize: (state) => ({
 				projectFilters: state.projectFilters,
 				authorFilter: state.authorFilter,
+				reviewFilter: state.reviewFilter,
 				includeClosed: state.includeClosed,
 			}),
 		},
@@ -71,6 +84,7 @@ interface PullRequestsFilters {
 	search: string;
 	projectFilters: string[];
 	authorFilter: string | null;
+	reviewFilter: PullRequestReviewFilter | null;
 	includeClosed: boolean;
 }
 
@@ -82,6 +96,7 @@ export function pullRequestsSearchFromFilters(
 	const projects = serializeProjectFilters(filters.projectFilters);
 	if (projects) search.projects = projects;
 	if (filters.authorFilter) search.author = filters.authorFilter;
+	if (filters.reviewFilter) search.review = filters.reviewFilter;
 	if (filters.includeClosed) search.state = "all";
 	return search;
 }

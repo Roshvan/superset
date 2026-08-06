@@ -4,6 +4,10 @@ import { useDebouncedSearchNavigation } from "renderer/routes/_authenticated/_da
 import { useProjectQueryTargets } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import { normalizeAuthorFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/normalizeAuthorFilter";
 import {
+	normalizePullRequestReviewFilter,
+	type PullRequestReviewFilter,
+} from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/pullRequestReviewFilter";
+import {
 	pullRequestsSearchFromFilters,
 	usePullRequestsFilterStore,
 } from "../../stores/pullRequestsFilterStore";
@@ -14,6 +18,7 @@ interface PullRequestsViewProps {
 	initialSearch?: string;
 	initialProjects?: string[];
 	initialAuthor?: string;
+	initialReview?: string;
 	initialState?: "open" | "all";
 }
 
@@ -21,6 +26,7 @@ export function PullRequestsView({
 	initialSearch,
 	initialProjects,
 	initialAuthor,
+	initialReview,
 	initialState,
 }: PullRequestsViewProps) {
 	const navigate = useNavigate();
@@ -28,10 +34,12 @@ export function PullRequestsView({
 		search: storedSearch,
 		projectFilters: storedProjectFilters,
 		authorFilter: storedAuthorFilter,
+		reviewFilter: storedReviewFilter,
 		includeClosed: storedIncludeClosed,
 		setSearch: storeSetSearch,
 		setProjectFilters: storeSetProjectFilters,
 		setAuthorFilter: storeSetAuthorFilter,
+		setReviewFilter: storeSetReviewFilter,
 		setIncludeClosed: storeSetIncludeClosed,
 	} = usePullRequestsFilterStore();
 	const [searchQuery, setSearchQuery] = useState(initialSearch ?? storedSearch);
@@ -40,6 +48,10 @@ export function PullRequestsView({
 		initialAuthor === undefined
 			? storedAuthorFilter
 			: normalizeAuthorFilter(initialAuthor);
+	const reviewFilter =
+		initialReview === undefined
+			? storedReviewFilter
+			: normalizePullRequestReviewFilter(initialReview);
 	const includeClosed =
 		initialState === undefined ? storedIncludeClosed : initialState === "all";
 	const {
@@ -61,6 +73,7 @@ export function PullRequestsView({
 			search?: string;
 			projects?: string[];
 			author?: string | null;
+			review?: PullRequestReviewFilter | null;
 			includeClosed?: boolean;
 		}) =>
 			pullRequestsSearchFromFilters({
@@ -71,9 +84,11 @@ export function PullRequestsView({
 						: projectFilters,
 				authorFilter:
 					overrides.author !== undefined ? overrides.author : authorFilter,
+				reviewFilter:
+					overrides.review !== undefined ? overrides.review : reviewFilter,
 				includeClosed: overrides.includeClosed ?? includeClosed,
 			}),
-		[authorFilter, includeClosed, projectFilters, searchQuery],
+		[authorFilter, includeClosed, projectFilters, reviewFilter, searchQuery],
 	);
 	const navigateSearch = useCallback(
 		(query: string) => {
@@ -97,6 +112,10 @@ export function PullRequestsView({
 	useEffect(() => {
 		storeSetAuthorFilter(authorFilter);
 	}, [authorFilter, storeSetAuthorFilter]);
+
+	useEffect(() => {
+		storeSetReviewFilter(reviewFilter);
+	}, [reviewFilter, storeSetReviewFilter]);
 
 	useEffect(() => {
 		storeSetIncludeClosed(includeClosed);
@@ -172,6 +191,18 @@ export function PullRequestsView({
 		});
 	};
 
+	const handleReviewFilterChange = (
+		nextReview: PullRequestReviewFilter | null,
+	) => {
+		cancelPendingSearchNavigation();
+		storeSetReviewFilter(nextReview);
+		navigate({
+			to: "/pull-requests",
+			search: buildSearch({ review: nextReview }),
+			replace: true,
+		});
+	};
+
 	return (
 		<div
 			data-pull-requests-view
@@ -184,6 +215,8 @@ export function PullRequestsView({
 				onProjectFiltersChange={handleProjectFiltersChange}
 				authorFilter={authorFilter}
 				onAuthorFilterChange={handleAuthorFilterChange}
+				reviewFilter={reviewFilter}
+				onReviewFilterChange={handleReviewFilterChange}
 				includeClosed={includeClosed}
 				onIncludeClosedChange={handleIncludeClosedChange}
 			/>
@@ -195,6 +228,7 @@ export function PullRequestsView({
 					hasProjects={projects.length > 0}
 					searchQuery={searchQuery}
 					authorFilter={authorFilter}
+					reviewFilter={reviewFilter}
 					includeClosed={includeClosed}
 				/>
 			</div>

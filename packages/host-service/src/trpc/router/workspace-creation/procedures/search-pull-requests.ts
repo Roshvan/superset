@@ -45,8 +45,33 @@ const githubAuthorSchema = z
 	)
 	.transform((author) => author.replace(/^@/, ""));
 
+const pullRequestReviewFilterSchema = z.enum([
+	"none",
+	"required",
+	"approved",
+	"changes-requested",
+	"reviewed-by-me",
+	"not-reviewed-by-me",
+	"review-requested",
+	"team-review-requested",
+]);
+
+type PullRequestReviewFilter = z.infer<typeof pullRequestReviewFilterSchema>;
+
+const REVIEW_QUERY_BY_FILTER: Record<PullRequestReviewFilter, string> = {
+	none: "review:none",
+	required: "review:required",
+	approved: "review:approved",
+	"changes-requested": "review:changes_requested",
+	"reviewed-by-me": "reviewed-by:@me",
+	"not-reviewed-by-me": "-reviewed-by:@me",
+	"review-requested": "user-review-requested:@me",
+	"team-review-requested": "review-requested:@me",
+};
+
 const searchPullRequestsInputSchema = githubSearchInputSchema.extend({
 	author: githubAuthorSchema.optional(),
+	review: pullRequestReviewFilterSchema.optional(),
 });
 
 function emptyPullRequestsPage(page: number): PullRequestsPage {
@@ -361,6 +386,7 @@ export const searchPullRequests = protectedProcedure
 		const effectiveQuery = [
 			normalized.query,
 			input.author ? `author:${input.author}` : "",
+			input.review ? REVIEW_QUERY_BY_FILTER[input.review] : "",
 		]
 			.filter(Boolean)
 			.join(" ");
@@ -370,6 +396,23 @@ export const searchPullRequests = protectedProcedure
 		try {
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
+				if (input.review) {
+					const reviewMatches = await ghApiSearchPullRequests(
+						ctx.execGh,
+						repo,
+						effectiveQuery,
+						true,
+						1,
+						100,
+					);
+					if (
+						!reviewMatches.items.some(
+							(pullRequest) => pullRequest.prNumber === prNumber,
+						)
+					) {
+						return emptyPullRequestsPage(page);
+					}
+				}
 				const pr = await ghDirectLookup(ctx.execGh, repo, prNumber);
 				if (!matchesAuthor(pr.authorLogin, input.author)) {
 					return emptyPullRequestsPage(page);
@@ -424,6 +467,20 @@ export const searchPullRequests = protectedProcedure
 		try {
 			if (normalized.isDirectLookup) {
 				const prNumber = Number.parseInt(normalized.query, 10);
+				if (input.review) {
+					const { data } = await octokit.search.issuesAndPullRequests({
+						q: `repo:${repo.owner}/${repo.name} is:pr ${effectiveQuery}`,
+						per_page: 100,
+						page: 1,
+					});
+					if (
+						!data.items.some(
+							(item) => !!item.pull_request && item.number === prNumber,
+						)
+					) {
+						return emptyPullRequestsPage(page);
+					}
+				}
 				const { data: pr } = await octokit.pulls.get({
 					owner: repo.owner,
 					repo: repo.name,

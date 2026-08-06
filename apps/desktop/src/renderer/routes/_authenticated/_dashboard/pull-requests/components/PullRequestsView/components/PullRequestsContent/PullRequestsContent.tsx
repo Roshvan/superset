@@ -9,6 +9,7 @@ import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
 import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import type { PullRequestReviewFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/pullRequestReviewFilter";
 import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
 import {
@@ -29,6 +30,7 @@ interface PullRequestsContentProps {
 	hasProjects: boolean;
 	searchQuery: string;
 	authorFilter: string | null;
+	reviewFilter: PullRequestReviewFilter | null;
 	includeClosed: boolean;
 	onCollapse?: () => void;
 }
@@ -42,6 +44,7 @@ export function PullRequestsContent({
 	hasProjects,
 	searchQuery,
 	authorFilter,
+	reviewFilter,
 	includeClosed,
 	onCollapse,
 }: PullRequestsContentProps) {
@@ -63,7 +66,7 @@ export function PullRequestsContent({
 		sentinelRef,
 	} = useMultiRepoProjectPagination({
 		projectTargets,
-		resetKey: `${debouncedQuery.trim()}\0${authorFilter ?? ""}\0${includeClosed}`,
+		resetKey: `${debouncedQuery.trim()}\0${authorFilter ?? ""}\0${reviewFilter ?? ""}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
 				"pullRequests",
@@ -72,6 +75,7 @@ export function PullRequestsContent({
 				target.hostUrl,
 				debouncedQuery.trim(),
 				authorFilter,
+				reviewFilter,
 				includeClosed,
 				page,
 			],
@@ -82,6 +86,7 @@ export function PullRequestsContent({
 					projectId: target.projectId,
 					query: debouncedQuery.trim() || undefined,
 					author: authorFilter ?? undefined,
+					review: reviewFilter ?? undefined,
 					limit: PAGE_SIZE,
 					includeClosed,
 					page,
@@ -159,6 +164,7 @@ export function PullRequestsContent({
 				project: pr.projectId,
 				projects: serializeProjectFilters(projectFilters),
 				author: authorFilter ?? undefined,
+				review: reviewFilter ?? undefined,
 				state: includeClosed ? "all" : undefined,
 			},
 		});

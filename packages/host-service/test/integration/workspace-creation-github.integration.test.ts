@@ -177,6 +177,16 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		expect(calls[0].method).toBe("pulls.get");
 	});
 
+	test("searchPullRequests rejects an invalid GitHub author", async () => {
+		await expect(
+			host.trpc.workspaceCreation.searchPullRequests.query({
+				projectId,
+				author: "octo--cat",
+			}),
+		).rejects.toThrow("Author must be a valid GitHub username");
+		expect(calls).toHaveLength(0);
+	});
+
 	test("searchPullRequests filters search results to PRs only", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,

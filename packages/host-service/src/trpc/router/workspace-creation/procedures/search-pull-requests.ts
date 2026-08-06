@@ -40,7 +40,7 @@ const githubAuthorSchema = z
 	.string()
 	.trim()
 	.regex(
-		/^@?[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?(?:\[bot\])?$/i,
+		/^@?(?!.*--)[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?(?:\[bot\])?$/i,
 		"Author must be a valid GitHub username",
 	)
 	.transform((author) => author.replace(/^@/, ""));

@@ -9,6 +9,7 @@ describe("normalizeAuthorFilter", () => {
 
 	test("rejects empty and query-injection values", () => {
 		expect(normalizeAuthorFilter("  ")).toBeNull();
+		expect(normalizeAuthorFilter("octo--cat")).toBeNull();
 		expect(normalizeAuthorFilter("octocat author:someone-else")).toBeNull();
 		expect(normalizeAuthorFilter(42)).toBeNull();
 	});

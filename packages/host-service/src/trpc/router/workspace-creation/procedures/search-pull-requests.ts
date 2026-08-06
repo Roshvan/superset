@@ -36,6 +36,37 @@ export interface PullRequestsPage {
 	repoMismatch?: string;
 }
 
+const githubAuthorSchema = z
+	.string()
+	.trim()
+	.regex(
+		/^@?[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?(?:\[bot\])?$/i,
+		"Author must be a valid GitHub username",
+	)
+	.transform((author) => author.replace(/^@/, ""));
+
+const searchPullRequestsInputSchema = githubSearchInputSchema.extend({
+	author: githubAuthorSchema.optional(),
+});
+
+function emptyPullRequestsPage(page: number): PullRequestsPage {
+	return {
+		pullRequests: [],
+		totalCount: 0,
+		hasNextPage: false,
+		page,
+	};
+}
+
+function matchesAuthor(
+	authorLogin: string | null,
+	authorFilter: string | undefined,
+): boolean {
+	return (
+		!authorFilter || authorLogin?.toLowerCase() === authorFilter.toLowerCase()
+	);
+}
+
 function normalizePullRequestState(
 	state: string,
 	mergedAt: string | null | undefined,
@@ -308,7 +339,7 @@ async function ghGetPullRequestChecks(
 }
 
 export const searchPullRequests = protectedProcedure
-	.input(githubSearchInputSchema)
+	.input(searchPullRequestsInputSchema)
 	.query(async ({ ctx, input }): Promise<PullRequestsPage> => {
 		const repo = await resolveGithubRepo(ctx, input.projectId);
 		const limit = input.limit ?? 30;
@@ -327,14 +358,22 @@ export const searchPullRequests = protectedProcedure
 			};
 		}
 
-		const effectiveQuery = normalized.query;
+		const effectiveQuery = [
+			normalized.query,
+			input.author ? `author:${input.author}` : "",
+		]
+			.filter(Boolean)
+			.join(" ");
 
 		// gh-first uses the user's local `gh auth login`; falls back to
 		// Octokit when gh is missing, unauthed, or errors.
 		try {
 			if (normalized.isDirectLookup) {
-				const prNumber = Number.parseInt(effectiveQuery, 10);
+				const prNumber = Number.parseInt(normalized.query, 10);
 				const pr = await ghDirectLookup(ctx.execGh, repo, prNumber);
+				if (!matchesAuthor(pr.authorLogin, input.author)) {
+					return emptyPullRequestsPage(page);
+				}
 				return {
 					pullRequests: [pr],
 					totalCount: 1,
@@ -384,12 +423,15 @@ export const searchPullRequests = protectedProcedure
 
 		try {
 			if (normalized.isDirectLookup) {
-				const prNumber = Number.parseInt(effectiveQuery, 10);
+				const prNumber = Number.parseInt(normalized.query, 10);
 				const { data: pr } = await octokit.pulls.get({
 					owner: repo.owner,
 					repo: repo.name,
 					pull_number: prNumber,
 				});
+				if (!matchesAuthor(pr.user?.login ?? null, input.author)) {
+					return emptyPullRequestsPage(page);
+				}
 				const state = normalizePullRequestState(pr.state, pr.merged_at);
 				return {
 					pullRequests: [

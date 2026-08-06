@@ -28,6 +28,7 @@ interface PullRequestsContentProps {
 	areProjectsReady: boolean;
 	hasProjects: boolean;
 	searchQuery: string;
+	authorFilter: string | null;
 	includeClosed: boolean;
 	onCollapse?: () => void;
 }
@@ -40,6 +41,7 @@ export function PullRequestsContent({
 	areProjectsReady,
 	hasProjects,
 	searchQuery,
+	authorFilter,
 	includeClosed,
 	onCollapse,
 }: PullRequestsContentProps) {
@@ -61,7 +63,7 @@ export function PullRequestsContent({
 		sentinelRef,
 	} = useMultiRepoProjectPagination({
 		projectTargets,
-		resetKey: `${debouncedQuery.trim()}\0${includeClosed}`,
+		resetKey: `${debouncedQuery.trim()}\0${authorFilter ?? ""}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
 				"pullRequests",
@@ -69,6 +71,7 @@ export function PullRequestsContent({
 				target.projectId,
 				target.hostUrl,
 				debouncedQuery.trim(),
+				authorFilter,
 				includeClosed,
 				page,
 			],
@@ -78,6 +81,7 @@ export function PullRequestsContent({
 				return client.workspaceCreation.searchPullRequests.query({
 					projectId: target.projectId,
 					query: debouncedQuery.trim() || undefined,
+					author: authorFilter ?? undefined,
 					limit: PAGE_SIZE,
 					includeClosed,
 					page,
@@ -154,6 +158,7 @@ export function PullRequestsContent({
 				search: searchQuery || undefined,
 				project: pr.projectId,
 				projects: serializeProjectFilters(projectFilters),
+				author: authorFilter ?? undefined,
 				state: includeClosed ? "all" : undefined,
 			},
 		});

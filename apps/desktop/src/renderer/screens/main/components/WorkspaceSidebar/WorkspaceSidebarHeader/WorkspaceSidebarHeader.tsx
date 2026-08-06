@@ -55,6 +55,7 @@ export function WorkspaceSidebarHeader({
 	const {
 		search: lastPullRequestsSearch,
 		projectFilters: lastPullRequestsProjectFilters,
+		authorFilter: lastPullRequestsAuthorFilter,
 		includeClosed: lastPullRequestsIncludeClosed,
 	} = usePullRequestsFilterStore();
 
@@ -82,6 +83,7 @@ export function WorkspaceSidebarHeader({
 				search: pullRequestsSearchFromFilters({
 					search: lastPullRequestsSearch,
 					projectFilters: lastPullRequestsProjectFilters,
+					authorFilter: lastPullRequestsAuthorFilter,
 					includeClosed: lastPullRequestsIncludeClosed,
 				}),
 			});

@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDebouncedSearchNavigation } from "renderer/routes/_authenticated/_dashboard/hooks/useDebouncedSearchNavigation";
 import { useProjectQueryTargets } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import { normalizeAuthorFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/normalizeAuthorFilter";
 import {
 	pullRequestsSearchFromFilters,
 	usePullRequestsFilterStore,
@@ -12,25 +13,33 @@ import { PullRequestsTopBar } from "./components/PullRequestsTopBar";
 interface PullRequestsViewProps {
 	initialSearch?: string;
 	initialProjects?: string[];
+	initialAuthor?: string;
 	initialState?: "open" | "all";
 }
 
 export function PullRequestsView({
 	initialSearch,
 	initialProjects,
+	initialAuthor,
 	initialState,
 }: PullRequestsViewProps) {
 	const navigate = useNavigate();
 	const {
 		search: storedSearch,
 		projectFilters: storedProjectFilters,
+		authorFilter: storedAuthorFilter,
 		includeClosed: storedIncludeClosed,
 		setSearch: storeSetSearch,
 		setProjectFilters: storeSetProjectFilters,
+		setAuthorFilter: storeSetAuthorFilter,
 		setIncludeClosed: storeSetIncludeClosed,
 	} = usePullRequestsFilterStore();
 	const [searchQuery, setSearchQuery] = useState(initialSearch ?? storedSearch);
 	const projectFilters = initialProjects ?? storedProjectFilters;
+	const authorFilter =
+		initialAuthor === undefined
+			? storedAuthorFilter
+			: normalizeAuthorFilter(initialAuthor);
 	const includeClosed =
 		initialState === undefined ? storedIncludeClosed : initialState === "all";
 	const {
@@ -51,6 +60,7 @@ export function PullRequestsView({
 		(overrides: {
 			search?: string;
 			projects?: string[];
+			author?: string | null;
 			includeClosed?: boolean;
 		}) =>
 			pullRequestsSearchFromFilters({
@@ -59,9 +69,11 @@ export function PullRequestsView({
 					overrides.projects !== undefined
 						? overrides.projects
 						: projectFilters,
+				authorFilter:
+					overrides.author !== undefined ? overrides.author : authorFilter,
 				includeClosed: overrides.includeClosed ?? includeClosed,
 			}),
-		[includeClosed, projectFilters, searchQuery],
+		[authorFilter, includeClosed, projectFilters, searchQuery],
 	);
 	const navigateSearch = useCallback(
 		(query: string) => {
@@ -81,6 +93,10 @@ export function PullRequestsView({
 	useEffect(() => {
 		storeSetProjectFilters(projectFilters);
 	}, [projectFilters, storeSetProjectFilters]);
+
+	useEffect(() => {
+		storeSetAuthorFilter(authorFilter);
+	}, [authorFilter, storeSetAuthorFilter]);
 
 	useEffect(() => {
 		storeSetIncludeClosed(includeClosed);
@@ -146,6 +162,16 @@ export function PullRequestsView({
 		});
 	};
 
+	const handleAuthorFilterChange = (nextAuthor: string | null) => {
+		cancelPendingSearchNavigation();
+		storeSetAuthorFilter(nextAuthor);
+		navigate({
+			to: "/pull-requests",
+			search: buildSearch({ author: nextAuthor }),
+			replace: true,
+		});
+	};
+
 	return (
 		<div
 			data-pull-requests-view
@@ -156,6 +182,8 @@ export function PullRequestsView({
 				onSearchChange={handleSearchChange}
 				projectFilters={projectFilters}
 				onProjectFiltersChange={handleProjectFiltersChange}
+				authorFilter={authorFilter}
+				onAuthorFilterChange={handleAuthorFilterChange}
 				includeClosed={includeClosed}
 				onIncludeClosedChange={handleIncludeClosedChange}
 			/>
@@ -166,6 +194,7 @@ export function PullRequestsView({
 					areProjectsReady={areProjectsReady}
 					hasProjects={projects.length > 0}
 					searchQuery={searchQuery}
+					authorFilter={authorFilter}
 					includeClosed={includeClosed}
 				/>
 			</div>

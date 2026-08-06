@@ -10,6 +10,7 @@ describe("pullRequestsSearchFromFilters", () => {
 			pullRequestsSearchFromFilters({
 				search: "",
 				projectFilters: [],
+				authorFilter: null,
 				includeClosed: false,
 			}),
 		).toEqual({});
@@ -20,11 +21,13 @@ describe("pullRequestsSearchFromFilters", () => {
 			pullRequestsSearchFromFilters({
 				search: "remote host",
 				projectFilters: ["project-1", "project-2"],
+				authorFilter: "octocat",
 				includeClosed: true,
 			}),
 		).toEqual({
 			search: "remote host",
 			projects: "project-1,project-2",
+			author: "octocat",
 			state: "all",
 		});
 	});
@@ -33,22 +36,31 @@ describe("pullRequestsSearchFromFilters", () => {
 describe("migratePullRequestsFilterState", () => {
 	test("moves the legacy single repository into the multi-select state", () => {
 		expect(
-			migratePullRequestsFilterState({ projectFilter: "project-1" }),
-		).toMatchObject({ projectFilters: ["project-1"] });
+			migratePullRequestsFilterState({
+				projectFilter: "project-1",
+				authorFilter: " @octocat ",
+			}),
+		).toMatchObject({
+			projectFilters: ["project-1"],
+			authorFilter: "octocat",
+		});
 	});
 
 	test("defaults corrupt persisted values safely", () => {
 		expect(
 			migratePullRequestsFilterState({
 				projectFilters: ["project-1", 42, "project-1"],
+				authorFilter: "octocat author:someone-else",
 				includeClosed: "true",
 			}),
 		).toMatchObject({
 			projectFilters: ["project-1"],
+			authorFilter: null,
 			includeClosed: false,
 		});
 		expect(migratePullRequestsFilterState(null)).toMatchObject({
 			projectFilters: [],
+			authorFilter: null,
 			includeClosed: false,
 		});
 	});

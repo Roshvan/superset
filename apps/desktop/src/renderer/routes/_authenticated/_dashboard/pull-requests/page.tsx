@@ -10,13 +10,14 @@ export const Route = createFileRoute(
 });
 
 function PullRequestsPage() {
-	const { search, project, projects, state } =
+	const { search, project, projects, author, state } =
 		PullRequestsLayoutRoute.useSearch();
 
 	return (
 		<PullRequestsView
 			initialSearch={search}
 			initialProjects={resolveProjectFilterParams(projects, project, undefined)}
+			initialAuthor={author}
 			initialState={state}
 		/>
 	);

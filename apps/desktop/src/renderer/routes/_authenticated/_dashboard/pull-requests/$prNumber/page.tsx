@@ -22,6 +22,7 @@ import {
 import { useOpenNewWorkspaceModal } from "renderer/stores/new-workspace-modal";
 import { Route as PullRequestsLayoutRoute } from "../layout";
 import { pullRequestsSearchFromFilters } from "../stores/pullRequestsFilterStore";
+import { normalizeAuthorFilter } from "../utils/normalizeAuthorFilter";
 
 export const Route = createFileRoute(
 	"/_authenticated/_dashboard/pull-requests/$prNumber/",
@@ -54,9 +55,10 @@ function PullRequestDetailPage() {
 					projectId,
 					[],
 				),
+				authorFilter: normalizeAuthorFilter(search.author),
 				includeClosed: search.state === "all",
 			}),
-		[projectId, search.projects, search.search, search.state],
+		[projectId, search.author, search.projects, search.search, search.state],
 	);
 
 	const { data, isLoading, error, refetch } = useQuery({

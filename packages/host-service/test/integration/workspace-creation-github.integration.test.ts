@@ -154,6 +154,7 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "#33",
+			author: "@BOB",
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(33);
@@ -165,14 +166,29 @@ describe("workspaceCreation github procedures with mocked Octokit", () => {
 		});
 	});
 
+	test("searchPullRequests filters a direct lookup by author", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			author: "alice",
+		});
+		expect(result.pullRequests).toEqual([]);
+		expect(result.totalCount).toBe(0);
+		expect(calls[0].method).toBe("pulls.get");
+	});
+
 	test("searchPullRequests filters search results to PRs only", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "find me",
+			author: "carol",
 		});
 		// Our fake search returns one issue (no `pull_request`), so no PRs.
 		expect(result.pullRequests).toEqual([]);
 		expect(calls[0].method).toBe("search.issuesAndPullRequests");
+		expect(calls[0].args).toMatchObject({
+			q: expect.stringContaining("author:carol"),
+		});
 	});
 });
 
@@ -519,6 +535,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "#33",
+			author: "bob",
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(33);
@@ -536,10 +553,22 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(ghCalls[0].cwd).toBe(realpathSync(repoDir));
 	});
 
+	test("searchPullRequests filters a gh direct lookup by author", async () => {
+		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
+			projectId,
+			query: "#33",
+			author: "alice",
+		});
+		expect(result.pullRequests).toEqual([]);
+		expect(result.totalCount).toBe(0);
+		expect(ghCalls).toHaveLength(1);
+	});
+
 	test("searchPullRequests free-text invokes `gh api search/issues` with is:pr filter", async () => {
 		const result = await host.trpc.workspaceCreation.searchPullRequests.query({
 			projectId,
 			query: "find me",
+			author: "carol",
 		});
 		expect(result.pullRequests).toHaveLength(1);
 		expect(result.pullRequests[0].prNumber).toBe(101);
@@ -555,6 +584,7 @@ describe("gh CLI is first-class when execGh succeeds", () => {
 		expect(qArg).toContain("is:pr");
 		expect(qArg).toContain("is:open");
 		expect(qArg).toContain("find me");
+		expect(qArg).toContain("author:carol");
 		expect(ghCalls[1].args.slice(0, 2)).toEqual(["api", "graphql"]);
 		expect(ghCalls[1].args.join(" ")).toContain("pullRequest(number:101)");
 		expect(ghCalls[1].args.join(" ")).not.toContain("pullRequest(number:999)");

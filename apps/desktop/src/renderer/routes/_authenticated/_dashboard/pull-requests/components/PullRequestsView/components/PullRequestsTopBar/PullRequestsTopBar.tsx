@@ -1,12 +1,15 @@
 import { OpenClosedFilter } from "renderer/routes/_authenticated/_dashboard/components/OpenClosedFilter";
 import { ProjectFilter } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter";
 import { WorkItemsSearch } from "renderer/routes/_authenticated/_dashboard/components/WorkItemsSearch";
+import { AuthorFilter } from "./components/AuthorFilter";
 
 interface PullRequestsTopBarProps {
 	searchQuery: string;
 	onSearchChange: (query: string) => void;
 	projectFilters: string[];
 	onProjectFiltersChange: (projectIds: string[]) => void;
+	authorFilter: string | null;
+	onAuthorFilterChange: (author: string | null) => void;
 	includeClosed: boolean;
 	onIncludeClosedChange: (includeClosed: boolean) => void;
 }
@@ -16,6 +19,8 @@ export function PullRequestsTopBar({
 	onSearchChange,
 	projectFilters,
 	onProjectFiltersChange,
+	authorFilter,
+	onAuthorFilterChange,
 	includeClosed,
 	onIncludeClosedChange,
 }: PullRequestsTopBarProps) {
@@ -31,6 +36,14 @@ export function PullRequestsTopBar({
 						<ProjectFilter
 							value={projectFilters}
 							onChange={onProjectFiltersChange}
+						/>
+					</div>
+					<div className="h-4 w-px shrink-0 bg-border" />
+					<div className="flex items-center gap-2">
+						<span className="text-xs text-muted-foreground">Author</span>
+						<AuthorFilter
+							value={authorFilter}
+							onChange={onAuthorFilterChange}
 						/>
 					</div>
 					<div className="h-4 w-px shrink-0 bg-border" />

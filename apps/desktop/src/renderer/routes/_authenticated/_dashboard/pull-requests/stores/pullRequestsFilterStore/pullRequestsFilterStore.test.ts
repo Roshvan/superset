@@ -2,7 +2,27 @@ import { describe, expect, test } from "bun:test";
 import {
 	migratePullRequestsFilterState,
 	pullRequestsSearchFromFilters,
+	usePullRequestsFilterStore,
 } from "./pullRequestsFilterStore";
+
+describe("usePullRequestsFilterStore.setProjectFilters", () => {
+	test("does not notify subscribers when filters are unchanged", () => {
+		// Views sync filters back through an effect keyed on this array, so an
+		// always-fresh reference here regresses into an infinite update loop.
+		const { setProjectFilters } = usePullRequestsFilterStore.getState();
+		setProjectFilters(["project-1", "project-2"]);
+		const before = usePullRequestsFilterStore.getState().projectFilters;
+		let notifications = 0;
+		const unsubscribe = usePullRequestsFilterStore.subscribe(() => {
+			notifications += 1;
+		});
+		setProjectFilters(["project-1", "project-2"]);
+		unsubscribe();
+		expect(usePullRequestsFilterStore.getState().projectFilters).toBe(before);
+		expect(notifications).toBe(0);
+		usePullRequestsFilterStore.getState().setProjectFilters([]);
+	});
+});
 
 describe("pullRequestsSearchFromFilters", () => {
 	test("omits default filters", () => {

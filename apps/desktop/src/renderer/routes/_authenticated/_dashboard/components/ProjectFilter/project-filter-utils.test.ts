@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	areProjectFiltersEqual,
 	normalizeProjectFilters,
 	parseProjectFilterParam,
 	resolveProjectFilterParams,
@@ -23,6 +24,23 @@ describe("project filter serialization", () => {
 		expect(
 			normalizeProjectFilters([" project-1 ", null, "project-1", " "]),
 		).toEqual(["project-1"]);
+	});
+
+	test("compares filters by content and order", () => {
+		expect(areProjectFiltersEqual([], [])).toBe(true);
+		expect(
+			areProjectFiltersEqual(
+				["project-1", "project-2"],
+				["project-1", "project-2"],
+			),
+		).toBe(true);
+		expect(
+			areProjectFiltersEqual(
+				["project-1", "project-2"],
+				["project-2", "project-1"],
+			),
+		).toBe(false);
+		expect(areProjectFiltersEqual(["project-1"], [])).toBe(false);
 	});
 
 	test("resolves multi-select, legacy, and caller-specific empty values", () => {

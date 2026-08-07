@@ -12,6 +12,10 @@ export function normalizeProjectFilters(value: unknown): string[] {
 	];
 }
 
+export function areProjectFiltersEqual(a: string[], b: string[]): boolean {
+	return a.length === b.length && a.every((projectId, i) => projectId === b[i]);
+}
+
 export function parseProjectFilterParam(value: string | undefined): string[] {
 	if (!value) return [];
 	return normalizeProjectFilters(value.split(","));

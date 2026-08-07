@@ -47,21 +47,18 @@ function PullRequestDetailPage() {
 	const resetDraft = useNewWorkspaceDraftStore((state) => state.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
+	// `project` identifies this PR's repo, not the list filter: falling back
+	// to it would rewrite an "all repositories" view to a single repo on back.
 	const backSearch = useMemo(
 		() =>
 			pullRequestsSearchFromFilters({
 				search: search.search ?? "",
-				projectFilters: resolveProjectFilterParams(
-					search.projects,
-					projectId,
-					[],
-				),
+				projectFilters: resolveProjectFilterParams(search.projects, null, []),
 				authorFilter: normalizeAuthorFilter(search.author),
 				reviewFilter: normalizePullRequestReviewFilter(search.review),
 				includeClosed: search.state === "all",
 			}),
 		[
-			projectId,
 			search.author,
 			search.projects,
 			search.review,

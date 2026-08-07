@@ -1,4 +1,5 @@
 import {
+	areProjectFiltersEqual,
 	normalizeProjectFilters,
 	serializeProjectFilters,
 } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
@@ -56,8 +57,17 @@ export const usePullRequestsFilterStore = create<PullRequestsFilterState>()(
 			reviewFilter: null,
 			includeClosed: false,
 			setSearch: (search) => set({ search }),
+			// Bail on equal content: views sync filters back through an effect,
+			// so an always-fresh array here becomes an infinite update loop.
+			// Bail on equal content: views sync filters back through an effect,
+			// so an always-fresh array here becomes an infinite update loop.
 			setProjectFilters: (projectFilters) =>
-				set({ projectFilters: normalizeProjectFilters(projectFilters) }),
+				set((state) => {
+					const next = normalizeProjectFilters(projectFilters);
+					return areProjectFiltersEqual(state.projectFilters, next)
+						? state
+						: { projectFilters: next };
+				}),
 			setAuthorFilter: (authorFilter) =>
 				set({ authorFilter: normalizeAuthorFilter(authorFilter) }),
 			setReviewFilter: (reviewFilter) =>

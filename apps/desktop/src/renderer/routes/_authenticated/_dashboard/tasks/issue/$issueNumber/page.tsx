@@ -41,6 +41,8 @@ function IssueDetailPage() {
 	const resetDraft = useNewWorkspaceDraftStore((state) => state.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
+	// `project` identifies this issue's repo, not the list filter: falling back
+	// to it would rewrite an "all repositories" view to a single repo on back.
 	const backSearch = useMemo(
 		() =>
 			tasksSearchFromFilters({
@@ -48,16 +50,11 @@ function IssueDetailPage() {
 				assignee: search.assignee ?? null,
 				search: search.search ?? "",
 				typeTab: "issues",
-				projectFilters: resolveProjectFilterParams(
-					search.projects,
-					projectId,
-					[],
-				),
+				projectFilters: resolveProjectFilterParams(search.projects, null, []),
 				linearProjectFilter: search.linearProject ?? null,
 				includeClosedIssues: search.state === "all",
 			}),
 		[
-			projectId,
 			search.assignee,
 			search.linearProject,
 			search.search,

@@ -1,4 +1,5 @@
 import {
+	areProjectFiltersEqual,
 	normalizeProjectFilters,
 	serializeProjectFilters,
 } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
@@ -99,7 +100,15 @@ export const useTasksFilterStore = create<TasksFilterState>()(
 			setSearch: (search) => set({ search }),
 			setViewMode: (viewMode) => set({ viewMode }),
 			setTypeTab: (typeTab) => set({ typeTab }),
-			setProjectFilters: (projectFilters) => set({ projectFilters }),
+			// Bail on equal content: views sync filters back through an effect,
+			// so an always-fresh array here becomes an infinite update loop.
+			setProjectFilters: (projectFilters) =>
+				set((state) => {
+					const next = normalizeProjectFilters(projectFilters);
+					return areProjectFiltersEqual(state.projectFilters, next)
+						? state
+						: { projectFilters: next };
+				}),
 			setLinearProjectFilter: (linearProjectFilter) =>
 				set({ linearProjectFilter }),
 			setIncludeClosedIssues: (includeClosedIssues) =>

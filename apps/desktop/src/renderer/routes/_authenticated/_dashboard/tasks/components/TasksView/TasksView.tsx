@@ -80,9 +80,12 @@ export function TasksView({
 			? storedIncludeClosedIssues
 			: initialState === "all";
 
+	// Sync only from the URL: depending on storedSearch would snap the input
+	// back to the stale URL value on every keystroke until the debounced
+	// navigation lands.
 	useEffect(() => {
-		setSearchQuery(initialSearch ?? storedSearch);
-	}, [initialSearch, storedSearch]);
+		if (initialSearch !== undefined) setSearchQuery(initialSearch);
+	}, [initialSearch]);
 
 	const buildSearch = useCallback(
 		(overrides: {

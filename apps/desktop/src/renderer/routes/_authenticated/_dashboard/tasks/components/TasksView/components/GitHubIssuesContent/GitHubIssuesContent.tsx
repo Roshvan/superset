@@ -435,12 +435,19 @@ export function GitHubIssuesContent({
 								</div>
 							);
 						})}
-						{hasNextPage && (
+						{/* Stay mounted while the next page fetches: hasNextPage reads
+						    the in-flight page's data, so it goes false mid-fetch. */}
+						{(hasNextPage || isFetchingNextPage) && (
 							<div
 								ref={sentinelRef}
-								className="flex items-center justify-center py-3 text-xs text-muted-foreground"
+								className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground"
 							>
-								{isFetchingNextPage ? "Loading more…" : ""}
+								{isFetchingNextPage && (
+									<>
+										<LuRefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" />
+										<span>Loading more…</span>
+									</>
+								)}
 							</div>
 						)}
 					</div>

@@ -1,32 +1,44 @@
 import {
+	type Query,
 	type UseQueryOptions,
 	type UseQueryResult,
 	useQueries,
 } from "@tanstack/react-query";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { combineQueryResults } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
-import type { ProjectQueryTarget } from "../useProjectQueryTargets";
+import { shouldKeepWorkItemsPlaceholder } from "renderer/routes/_authenticated/_dashboard/utils/shouldKeepWorkItemsPlaceholder";
 
 interface PaginatedQueryData {
 	hasNextPage: boolean;
 }
 
-export interface PaginatedProjectQueryTarget {
-	target: ProjectQueryTarget;
+export interface PaginationTarget {
+	key: string;
+	hostUrl: string | null;
+}
+
+export interface PaginatedQueryTarget<TTarget extends PaginationTarget> {
+	target: TTarget;
 	page: number;
 }
 
-interface MultiRepoProjectPaginationOptions<TData extends PaginatedQueryData> {
-	projectTargets: ProjectQueryTarget[];
+interface MultiRepoProjectPaginationOptions<
+	TData extends PaginatedQueryData,
+	TTarget extends PaginationTarget,
+> {
+	targets: TTarget[];
 	resetKey: string;
 	getQueryOptions: (
-		queryTarget: PaginatedProjectQueryTarget,
+		queryTarget: PaginatedQueryTarget<TTarget>,
 	) => UseQueryOptions<TData | null, Error>;
 }
 
-interface MultiRepoProjectPaginationResult<TData extends PaginatedQueryData> {
+interface MultiRepoProjectPaginationResult<
+	TData extends PaginatedQueryData,
+	TTarget extends PaginationTarget,
+> {
 	queries: UseQueryResult<TData | null, Error>[];
-	queryTargets: PaginatedProjectQueryTarget[];
+	queryTargets: PaginatedQueryTarget<TTarget>[];
 	isFetching: boolean;
 	isFetchingNextPage: boolean;
 	hasNextPage: boolean;
@@ -36,12 +48,12 @@ interface MultiRepoProjectPaginationResult<TData extends PaginatedQueryData> {
 	sentinelRef: RefObject<HTMLDivElement | null>;
 }
 
-export function buildPaginatedProjectQueryTargets(
-	projectTargets: ProjectQueryTarget[],
-	pageCountByProject: Readonly<Record<string, number>>,
-): PaginatedProjectQueryTarget[] {
-	return projectTargets.flatMap((target) => {
-		const pageCount = pageCountByProject[target.projectId] ?? 1;
+export function buildPaginatedQueryTargets<TTarget extends PaginationTarget>(
+	targets: TTarget[],
+	pageCountByTarget: Readonly<Record<string, number>>,
+): PaginatedQueryTarget<TTarget>[] {
+	return targets.flatMap((target) => {
+		const pageCount = pageCountByTarget[target.key] ?? 1;
 		return Array.from({ length: pageCount }, (_, index) => ({
 			target,
 			page: index + 1,
@@ -51,51 +63,69 @@ export function buildPaginatedProjectQueryTargets(
 
 export function useMultiRepoProjectPagination<
 	TData extends PaginatedQueryData,
+	TTarget extends PaginationTarget,
 >({
-	projectTargets,
+	targets,
 	resetKey,
 	getQueryOptions,
-}: MultiRepoProjectPaginationOptions<TData>): MultiRepoProjectPaginationResult<TData> {
-	const projectTargetsKey = projectTargets
-		.map(({ projectId, hostUrl }) => `${projectId}:${hostUrl ?? ""}`)
+}: MultiRepoProjectPaginationOptions<
+	TData,
+	TTarget
+>): MultiRepoProjectPaginationResult<TData, TTarget> {
+	const targetsKey = targets
+		.map(({ key, hostUrl }) => `${key}:${hostUrl ?? ""}`)
 		.join("\0");
-	const paginationKey = `${projectTargetsKey}\0${resetKey}`;
+	const paginationKey = `${targetsKey}\0${resetKey}`;
 	const [pagination, setPagination] = useState<{
 		key: string;
-		pageCountByProject: Record<string, number>;
-	}>({ key: paginationKey, pageCountByProject: {} });
-	const pageCountByProject =
-		pagination.key === paginationKey ? pagination.pageCountByProject : {};
+		pageCountByTarget: Record<string, number>;
+	}>({ key: paginationKey, pageCountByTarget: {} });
+	const pageCountByTarget =
+		pagination.key === paginationKey ? pagination.pageCountByTarget : {};
 	const queryTargets = useMemo(
-		() => buildPaginatedProjectQueryTargets(projectTargets, pageCountByProject),
-		[pageCountByProject, projectTargets],
+		() => buildPaginatedQueryTargets(targets, pageCountByTarget),
+		[pageCountByTarget, targets],
 	);
-	const queryOptions = queryTargets.map(getQueryOptions);
+	// Keep the previous rows for the same target visible while a changed
+	// search/filter refetches, instead of blanking the list to a spinner.
+	const queryOptions = queryTargets.map((queryTarget) => ({
+		...getQueryOptions(queryTarget),
+		placeholderData: (
+			previousData: TData | null | undefined,
+			previousQuery: Query<TData | null, Error> | undefined,
+		) =>
+			shouldKeepWorkItemsPlaceholder(
+				previousQuery?.queryKey,
+				queryTarget.target.key,
+				queryTarget.target.hostUrl,
+			)
+				? previousData
+				: undefined,
+	}));
 	const queries = useQueries({
 		queries: queryOptions,
 		combine: combineQueryResults,
 	});
 	const isFetching = queries.some((query) => query.isFetching);
 	const error = queries.find((query) => query.error)?.error ?? null;
-	const latestProjectQueries = projectTargets.map((target) => {
-		const page = pageCountByProject[target.projectId] ?? 1;
+	const latestTargetQueries = targets.map((target) => {
+		const page = pageCountByTarget[target.key] ?? 1;
 		const index = queryTargets.findIndex(
 			(queryTarget) =>
-				queryTarget.target.projectId === target.projectId &&
-				queryTarget.page === page,
+				queryTarget.target.key === target.key && queryTarget.page === page,
 		);
 		return { target, page, query: queries[index] };
 	});
-	const isFetchingNextPage = latestProjectQueries.some(
+	const isFetchingNextPage = latestTargetQueries.some(
 		({ page, query }) => page > 1 && query?.isFetching,
 	);
-	const expandableProjectIds = latestProjectQueries.flatMap(
-		({ target, query }) => (query?.data?.hasNextPage ? [target.projectId] : []),
+	const expandableTargetKeys = latestTargetQueries.flatMap(
+		({ target, query }) => (query?.data?.hasNextPage ? [target.key] : []),
 	);
-	const expandableProjectIdsRef = useRef(expandableProjectIds);
-	expandableProjectIdsRef.current = expandableProjectIds;
-	const expandableProjectIdsKey = expandableProjectIds.join("\0");
-	const hasNextPage = expandableProjectIdsKey.length > 0;
+	const expandableTargetKeysRef = useRef(expandableTargetKeys);
+	expandableTargetKeysRef.current = expandableTargetKeys;
+	const expandableTargetKeysKey = expandableTargetKeys.join("\0");
+	const hasNextPage = expandableTargetKeysKey.length > 0;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -105,7 +135,7 @@ export function useMultiRepoProjectPagination<
 		if (
 			!sentinel ||
 			!scrollContainer ||
-			!expandableProjectIdsKey ||
+			!expandableTargetKeysKey ||
 			isFetchingNextPage
 		) {
 			return;
@@ -115,19 +145,19 @@ export function useMultiRepoProjectPagination<
 				if (!entries[0]?.isIntersecting) return;
 				setPagination((current) => {
 					const currentPageCounts =
-						current.key === paginationKey ? current.pageCountByProject : {};
+						current.key === paginationKey ? current.pageCountByTarget : {};
 					const next = { ...currentPageCounts };
-					for (const projectId of expandableProjectIdsRef.current) {
-						next[projectId] = (currentPageCounts[projectId] ?? 1) + 1;
+					for (const targetKey of expandableTargetKeysRef.current) {
+						next[targetKey] = (currentPageCounts[targetKey] ?? 1) + 1;
 					}
-					return { key: paginationKey, pageCountByProject: next };
+					return { key: paginationKey, pageCountByTarget: next };
 				});
 			},
 			{ root: scrollContainer, rootMargin: "200px" },
 		);
 		observer.observe(sentinel);
 		return () => observer.disconnect();
-	}, [expandableProjectIdsKey, isFetchingNextPage, paginationKey]);
+	}, [expandableTargetKeysKey, isFetchingNextPage, paginationKey]);
 
 	return {
 		queries,

@@ -8,7 +8,10 @@ import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
-import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import {
+	groupProjectTargetsByHost,
+	type ProjectQueryTarget,
+} from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import type { PullRequestReviewFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/pullRequestReviewFilter";
 import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
@@ -54,6 +57,19 @@ export function PullRequestsContent({
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
+	// One batched search per host covers all of its repositories — per-repo
+	// fan-out burns GitHub's 30-per-minute search quota.
+	const hostTargets = useMemo(
+		() => groupProjectTargetsByHost(projectTargets),
+		[projectTargets],
+	);
+	const projectNameById = useMemo(
+		() =>
+			new Map(
+				projectTargets.map((target) => [target.projectId, target.projectName]),
+			),
+		[projectTargets],
+	);
 	const {
 		queries,
 		queryTargets,
@@ -65,13 +81,13 @@ export function PullRequestsContent({
 		scrollRef,
 		sentinelRef,
 	} = useMultiRepoProjectPagination({
-		projectTargets,
+		targets: hostTargets,
 		resetKey: `${debouncedQuery.trim()}\0${authorFilter ?? ""}\0${reviewFilter ?? ""}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
 				"pullRequests",
 				"searchPullRequests",
-				target.projectId,
+				target.key,
 				target.hostUrl,
 				debouncedQuery.trim(),
 				authorFilter,
@@ -80,10 +96,12 @@ export function PullRequestsContent({
 				page,
 			],
 			queryFn: async () => {
-				if (!target.hostUrl) return null;
+				const firstProject = target.projects[0];
+				if (!target.hostUrl || !firstProject) return null;
 				const client = getHostServiceClientByUrl(target.hostUrl);
 				return client.workspaceCreation.searchPullRequests.query({
-					projectId: target.projectId,
+					projectId: firstProject.projectId,
+					projectIds: target.projects.map((project) => project.projectId),
 					query: debouncedQuery.trim() || undefined,
 					author: authorFilter ?? undefined,
 					review: reviewFilter ?? undefined,
@@ -112,7 +130,11 @@ export function PullRequestsContent({
 							target && query.data
 								? query.data.pullRequests.map((pullRequest) => ({
 										...pullRequest,
-										...target,
+										projectName:
+											projectNameById.get(pullRequest.projectId) ??
+											pullRequest.projectId,
+										hostId: target.hostId,
+										hostUrl: target.hostUrl,
 									}))
 								: [],
 					};
@@ -121,7 +143,7 @@ export function PullRequestsContent({
 					`${pullRequest.projectId}:${pullRequest.prNumber}`,
 				getUpdatedAt: (pullRequest) => pullRequest.updatedAt,
 			}),
-		[queries, queryTargets],
+		[queries, queryTargets, projectNameById],
 	);
 	const totalCount = queries.reduce((total, query, index) => {
 		return queryTargets[index]?.page === 1
@@ -277,7 +299,7 @@ export function PullRequestsContent({
 					<div className="flex flex-col">
 						{error instanceof Error && (
 							<div className="flex items-center gap-2 border-b border-border/50 bg-destructive/5 px-4 py-2 text-xs text-destructive">
-								<span className="min-w-0 flex-1 truncate">
+								<span className="min-w-0 flex-1 truncate select-text cursor-text">
 									Some repositories could not be loaded: {error.message}
 								</span>
 								<Button variant="outline" size="xs" onClick={() => refetch()}>

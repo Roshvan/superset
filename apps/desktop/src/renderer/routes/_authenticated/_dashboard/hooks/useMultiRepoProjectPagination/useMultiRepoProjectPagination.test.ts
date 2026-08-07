@@ -1,36 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import type { ProjectQueryTarget } from "../useProjectQueryTargets";
-import { buildPaginatedProjectQueryTargets } from "./useMultiRepoProjectPagination";
+import type { PaginationTarget } from "./useMultiRepoProjectPagination";
+import { buildPaginatedQueryTargets } from "./useMultiRepoProjectPagination";
 
-const projects: ProjectQueryTarget[] = [
-	{
-		projectId: "web",
-		projectName: "Web",
-		hostId: "host-1",
-		hostUrl: "http://localhost:3201",
-	},
-	{
-		projectId: "api",
-		projectName: "API",
-		hostId: "host-1",
-		hostUrl: "http://localhost:3201",
-	},
+const targets: PaginationTarget[] = [
+	{ key: "host-1\0web,api", hostUrl: "http://localhost:3201" },
+	{ key: "host-2\0docs", hostUrl: "http://localhost:3202" },
 ];
 
-describe("buildPaginatedProjectQueryTargets", () => {
-	test("starts every repository on its first page", () => {
-		expect(buildPaginatedProjectQueryTargets(projects, {})).toEqual([
-			{ target: projects[0], page: 1 },
-			{ target: projects[1], page: 1 },
+describe("buildPaginatedQueryTargets", () => {
+	test("starts every target on its first page", () => {
+		expect(buildPaginatedQueryTargets(targets, {})).toEqual([
+			{ target: targets[0], page: 1 },
+			{ target: targets[1], page: 1 },
 		]);
 	});
 
-	test("expands only repositories with additional requested pages", () => {
-		expect(buildPaginatedProjectQueryTargets(projects, { web: 3 })).toEqual([
-			{ target: projects[0], page: 1 },
-			{ target: projects[0], page: 2 },
-			{ target: projects[0], page: 3 },
-			{ target: projects[1], page: 1 },
+	test("expands only targets with additional requested pages", () => {
+		expect(
+			buildPaginatedQueryTargets(targets, { "host-1\0web,api": 3 }),
+		).toEqual([
+			{ target: targets[0], page: 1 },
+			{ target: targets[0], page: 2 },
+			{ target: targets[0], page: 3 },
+			{ target: targets[1], page: 1 },
 		]);
 	});
 });

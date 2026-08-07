@@ -9,7 +9,10 @@ import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
 import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
-import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import {
+	groupProjectTargetsByHost,
+	type ProjectQueryTarget,
+} from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
 import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
 import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
 import {
@@ -61,6 +64,19 @@ export function GitHubIssuesContent({
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
+	// One batched search per host covers all of its repositories — per-repo
+	// fan-out burns GitHub's 30-per-minute search quota.
+	const hostTargets = useMemo(
+		() => groupProjectTargetsByHost(projectTargets),
+		[projectTargets],
+	);
+	const projectNameById = useMemo(
+		() =>
+			new Map(
+				projectTargets.map((target) => [target.projectId, target.projectName]),
+			),
+		[projectTargets],
+	);
 	const {
 		queries,
 		queryTargets,
@@ -72,23 +88,25 @@ export function GitHubIssuesContent({
 		scrollRef,
 		sentinelRef,
 	} = useMultiRepoProjectPagination({
-		projectTargets,
+		targets: hostTargets,
 		resetKey: `${debouncedQuery.trim()}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
 				"tasks",
 				"searchGitHubIssues",
-				target.projectId,
+				target.key,
 				target.hostUrl,
 				debouncedQuery.trim(),
 				includeClosed,
 				page,
 			],
 			queryFn: async () => {
-				if (!target.hostUrl) return null;
+				const firstProject = target.projects[0];
+				if (!target.hostUrl || !firstProject) return null;
 				const client = getHostServiceClientByUrl(target.hostUrl);
 				return client.workspaceCreation.searchGitHubIssues.query({
-					projectId: target.projectId,
+					projectId: firstProject.projectId,
+					projectIds: target.projects.map((project) => project.projectId),
 					query: debouncedQuery.trim() || undefined,
 					limit: PAGE_SIZE,
 					includeClosed,
@@ -113,14 +131,20 @@ export function GitHubIssuesContent({
 						isPending: query.isFetching && !query.data && !query.error,
 						rows:
 							target && query.data
-								? query.data.issues.map((issue) => ({ ...issue, ...target }))
+								? query.data.issues.map((issue) => ({
+										...issue,
+										projectName:
+											projectNameById.get(issue.projectId) ?? issue.projectId,
+										hostId: target.hostId,
+										hostUrl: target.hostUrl,
+									}))
 								: [],
 					};
 				}),
 				getKey: (issue) => `${issue.projectId}:${issue.issueNumber}`,
 				getUpdatedAt: (issue) => issue.updatedAt,
 			}),
-		[queries, queryTargets],
+		[queries, queryTargets, projectNameById],
 	);
 	const totalCount = queries.reduce((total, query, index) => {
 		return queryTargets[index]?.page === 1
@@ -138,10 +162,13 @@ export function GitHubIssuesContent({
 		setSelectedIssues(new Map());
 	}, []);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: clear selection only when project changes
+	// Key off content, not array identity: URL re-renders rebuild the array
+	// and would wipe the selection on unrelated navigations.
+	const projectFiltersKey = projectFilters.join("\0");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: clear selection only when the selected repositories change
 	useEffect(() => {
 		setSelectedIssues(new Map());
-	}, [projectFilters]);
+	}, [projectFiltersKey]);
 
 	useEffect(() => {
 		if (!onSelectionChange) return;
@@ -305,7 +332,7 @@ export function GitHubIssuesContent({
 					<div className="flex flex-col">
 						{error instanceof Error && (
 							<div className="flex items-center gap-2 border-b border-border/50 bg-destructive/5 px-4 py-2 text-xs text-destructive">
-								<span className="min-w-0 flex-1 truncate">
+								<span className="min-w-0 flex-1 truncate select-text cursor-text">
 									Some repositories could not be loaded: {error.message}
 								</span>
 								<Button variant="outline" size="xs" onClick={() => refetch()}>

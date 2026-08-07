@@ -1,5 +1,6 @@
 export {
-	buildPaginatedProjectQueryTargets,
-	type PaginatedProjectQueryTarget,
+	buildPaginatedQueryTargets,
+	type PaginatedQueryTarget,
+	type PaginationTarget,
 	useMultiRepoProjectPagination,
 } from "./useMultiRepoProjectPagination";

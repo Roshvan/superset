@@ -1,5 +1,6 @@
 import { cn } from "@superset/ui/utils";
-import { LuCheck, LuCircleMinus, LuLoaderCircle, LuX } from "react-icons/lu";
+import { LuCircleMinus } from "react-icons/lu";
+import { CHECK_STATUS_ICONS } from "renderer/routes/_authenticated/_dashboard/utils/checkStatusIcons";
 import {
 	type PullRequestCheck,
 	summarizePullRequestChecks,
@@ -10,15 +11,9 @@ interface PullRequestChecksSummaryProps {
 }
 
 const STATUS_CONFIG = {
-	success: {
-		Icon: LuCheck,
-		className: "text-emerald-600 dark:text-emerald-400",
-	},
-	failure: { Icon: LuX, className: "text-red-600 dark:text-red-400" },
-	pending: {
-		Icon: LuLoaderCircle,
-		className: "text-amber-600 dark:text-amber-400",
-	},
+	success: CHECK_STATUS_ICONS.success,
+	failure: CHECK_STATUS_ICONS.failure,
+	pending: CHECK_STATUS_ICONS.pending,
 	none: { Icon: LuCircleMinus, className: "text-muted-foreground" },
 } as const;
 

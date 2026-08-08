@@ -1,20 +1,15 @@
 import { Button } from "@superset/ui/button";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { GoGitPullRequest } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
 import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
+import { LoadMoreSentinel } from "renderer/routes/_authenticated/_dashboard/components/LoadMoreSentinel";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
-import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
-import {
-	groupProjectTargetsByHost,
-	type ProjectQueryTarget,
-} from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import { useWorkItemsList } from "renderer/routes/_authenticated/_dashboard/hooks/useWorkItemsList";
 import type { PullRequestReviewFilter } from "renderer/routes/_authenticated/_dashboard/pull-requests/utils/pullRequestReviewFilter";
-import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
-import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
 import {
 	normalizePRState,
 	PRIcon,
@@ -57,22 +52,10 @@ export function PullRequestsContent({
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
-	// One batched search per host covers all of its repositories — per-repo
-	// fan-out burns GitHub's 30-per-minute search quota.
-	const hostTargets = useMemo(
-		() => groupProjectTargetsByHost(projectTargets),
-		[projectTargets],
-	);
-	const projectNameById = useMemo(
-		() =>
-			new Map(
-				projectTargets.map((target) => [target.projectId, target.projectName]),
-			),
-		[projectTargets],
-	);
 	const {
-		queries,
-		queryTargets,
+		rows: pullRequests,
+		totalCount,
+		repoMismatch,
 		isFetching,
 		isFetchingNextPage,
 		hasNextPage,
@@ -80,8 +63,8 @@ export function PullRequestsContent({
 		refetch,
 		scrollRef,
 		sentinelRef,
-	} = useMultiRepoProjectPagination({
-		targets: hostTargets,
+	} = useWorkItemsList({
+		projectTargets,
 		resetKey: `${debouncedQuery.trim()}\0${authorFilter ?? ""}\0${reviewFilter ?? ""}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
@@ -115,47 +98,10 @@ export function PullRequestsContent({
 			gcTime: 10 * 60_000,
 			retry: false,
 		}),
+		getRows: (data) => data.pullRequests,
+		getRowKey: (pullRequest) =>
+			`${pullRequest.projectId}:${pullRequest.prNumber}`,
 	});
-
-	const pullRequests = useMemo(
-		() =>
-			mergePaginatedProjectRows({
-				pages: queries.map((query, index) => {
-					const target = queryTargets[index]?.target;
-					const page = queryTargets[index]?.page ?? 1;
-					return {
-						page,
-						isPending: query.isFetching && !query.data && !query.error,
-						rows:
-							target && query.data
-								? query.data.pullRequests.map((pullRequest) => ({
-										...pullRequest,
-										projectName:
-											projectNameById.get(pullRequest.projectId) ??
-											pullRequest.projectId,
-										hostId: target.hostId,
-										hostUrl: target.hostUrl,
-									}))
-								: [],
-					};
-				}),
-				getKey: (pullRequest) =>
-					`${pullRequest.projectId}:${pullRequest.prNumber}`,
-				getUpdatedAt: (pullRequest) => pullRequest.updatedAt,
-			}),
-		[queries, queryTargets, projectNameById],
-	);
-	const totalCount = queries.reduce((total, query, index) => {
-		return queryTargets[index]?.page === 1
-			? total + (query.data?.totalCount ?? 0)
-			: total;
-	}, 0);
-	const repoMismatch = getRepositoryMismatchLabel(
-		queries.flatMap((query, index) =>
-			queryTargets[index]?.target.hostUrl ? [query.data] : [],
-		),
-		pullRequests.length,
-	);
 
 	const handleAddToWorkspace = (pr: (typeof pullRequests)[number]) => {
 		const linkedPR: LinkedPR = {
@@ -377,21 +323,11 @@ export function PullRequestsContent({
 								</div>
 							);
 						})}
-						{/* Stay mounted while the next page fetches: hasNextPage reads
-						    the in-flight page's data, so it goes false mid-fetch. */}
-						{(hasNextPage || isFetchingNextPage) && (
-							<div
-								ref={sentinelRef}
-								className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground"
-							>
-								{isFetchingNextPage && (
-									<>
-										<LuRefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" />
-										<span>Loading more…</span>
-									</>
-								)}
-							</div>
-						)}
+						<LoadMoreSentinel
+							sentinelRef={sentinelRef}
+							hasNextPage={hasNextPage}
+							isFetchingNextPage={isFetchingNextPage}
+						/>
 					</div>
 				)}
 			</div>

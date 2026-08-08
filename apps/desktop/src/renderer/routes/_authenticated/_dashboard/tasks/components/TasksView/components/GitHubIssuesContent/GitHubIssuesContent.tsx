@@ -1,20 +1,16 @@
 import { Button } from "@superset/ui/button";
 import { Checkbox } from "@superset/ui/checkbox";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GoIssueClosed, GoIssueOpened } from "react-icons/go";
 import { HiOutlineArrowTopRightOnSquare } from "react-icons/hi2";
 import { LuMinus, LuPlus, LuRefreshCw } from "react-icons/lu";
 import { useDebouncedValue } from "renderer/hooks/useDebouncedValue";
 import { getHostServiceClientByUrl } from "renderer/lib/host-service-client";
+import { LoadMoreSentinel } from "renderer/routes/_authenticated/_dashboard/components/LoadMoreSentinel";
 import { serializeProjectFilters } from "renderer/routes/_authenticated/_dashboard/components/ProjectFilter/project-filter-utils";
-import { useMultiRepoProjectPagination } from "renderer/routes/_authenticated/_dashboard/hooks/useMultiRepoProjectPagination";
-import {
-	groupProjectTargetsByHost,
-	type ProjectQueryTarget,
-} from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
-import { getRepositoryMismatchLabel } from "renderer/routes/_authenticated/_dashboard/utils/getRepositoryMismatchLabel";
-import { mergePaginatedProjectRows } from "renderer/routes/_authenticated/_dashboard/utils/mergePaginatedProjectRows";
+import type { ProjectQueryTarget } from "renderer/routes/_authenticated/_dashboard/hooks/useProjectQueryTargets";
+import { useWorkItemsList } from "renderer/routes/_authenticated/_dashboard/hooks/useWorkItemsList";
 import {
 	type LinkedIssue,
 	useNewWorkspaceDraftStore,
@@ -64,22 +60,10 @@ export function GitHubIssuesContent({
 	const resetDraft = useNewWorkspaceDraftStore((s) => s.resetDraft);
 	const openModal = useOpenNewWorkspaceModal();
 
-	// One batched search per host covers all of its repositories — per-repo
-	// fan-out burns GitHub's 30-per-minute search quota.
-	const hostTargets = useMemo(
-		() => groupProjectTargetsByHost(projectTargets),
-		[projectTargets],
-	);
-	const projectNameById = useMemo(
-		() =>
-			new Map(
-				projectTargets.map((target) => [target.projectId, target.projectName]),
-			),
-		[projectTargets],
-	);
 	const {
-		queries,
-		queryTargets,
+		rows: issues,
+		totalCount,
+		repoMismatch,
 		isFetching,
 		isFetchingNextPage,
 		hasNextPage,
@@ -87,8 +71,8 @@ export function GitHubIssuesContent({
 		refetch,
 		scrollRef,
 		sentinelRef,
-	} = useMultiRepoProjectPagination({
-		targets: hostTargets,
+	} = useWorkItemsList({
+		projectTargets,
 		resetKey: `${debouncedQuery.trim()}\0${includeClosed}`,
 		getQueryOptions: ({ target, page }) => ({
 			queryKey: [
@@ -118,45 +102,9 @@ export function GitHubIssuesContent({
 			gcTime: 10 * 60_000,
 			retry: false,
 		}),
+		getRows: (data) => data.issues,
+		getRowKey: (issue) => `${issue.projectId}:${issue.issueNumber}`,
 	});
-
-	const issues = useMemo(
-		() =>
-			mergePaginatedProjectRows({
-				pages: queries.map((query, index) => {
-					const target = queryTargets[index]?.target;
-					const page = queryTargets[index]?.page ?? 1;
-					return {
-						page,
-						isPending: query.isFetching && !query.data && !query.error,
-						rows:
-							target && query.data
-								? query.data.issues.map((issue) => ({
-										...issue,
-										projectName:
-											projectNameById.get(issue.projectId) ?? issue.projectId,
-										hostId: target.hostId,
-										hostUrl: target.hostUrl,
-									}))
-								: [],
-					};
-				}),
-				getKey: (issue) => `${issue.projectId}:${issue.issueNumber}`,
-				getUpdatedAt: (issue) => issue.updatedAt,
-			}),
-		[queries, queryTargets, projectNameById],
-	);
-	const totalCount = queries.reduce((total, query, index) => {
-		return queryTargets[index]?.page === 1
-			? total + (query.data?.totalCount ?? 0)
-			: total;
-	}, 0);
-	const repoMismatch = getRepositoryMismatchLabel(
-		queries.flatMap((query, index) =>
-			queryTargets[index]?.target.hostUrl ? [query.data] : [],
-		),
-		issues.length,
-	);
 
 	const clearSelection = useCallback(() => {
 		setSelectedIssues(new Map());
@@ -435,21 +383,11 @@ export function GitHubIssuesContent({
 								</div>
 							);
 						})}
-						{/* Stay mounted while the next page fetches: hasNextPage reads
-						    the in-flight page's data, so it goes false mid-fetch. */}
-						{(hasNextPage || isFetchingNextPage) && (
-							<div
-								ref={sentinelRef}
-								className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground"
-							>
-								{isFetchingNextPage && (
-									<>
-										<LuRefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" />
-										<span>Loading more…</span>
-									</>
-								)}
-							</div>
-						)}
+						<LoadMoreSentinel
+							sentinelRef={sentinelRef}
+							hasNextPage={hasNextPage}
+							isFetchingNextPage={isFetchingNextPage}
+						/>
 					</div>
 				)}
 			</div>

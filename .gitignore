@@ -66,6 +66,9 @@ next-env.d.ts
 .envrc
 .env.local
 .env
+.devenv*
+devenv.local.nix
+devenv.local.yaml
 
 # Reference material downloaded for agents
 examples

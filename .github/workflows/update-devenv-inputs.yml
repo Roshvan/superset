@@ -1,0 +1,148 @@
+name: Update devenv inputs
+
+on:
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-devenv-inputs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update devenv inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@2126ae7fc54c9df00dd18f7f18754393182c73cd # v31.9.1
+
+      - name: Configure the devenv binary cache
+        uses: cachix/cachix-action@3ba601ff5bbb07c7220846facfa2cd81eeee15a1 # v16
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+
+      - name: Capture current inputs and tool versions
+        run: |
+          git rev-parse HEAD >"$RUNNER_TEMP/validated-base"
+          cp devenv.lock "$RUNNER_TEMP/devenv.before.lock"
+          devenv shell devenv-tool-versions >"$RUNNER_TEMP/tools.before.tsv"
+
+      - name: Update every configured input
+        run: devenv update
+
+      - name: Verify the updated development environment
+        run: devenv test
+
+      - name: Build update report
+        id: report
+        run: |
+          devenv shell devenv-tool-versions >"$RUNNER_TEMP/tools.after.tsv"
+          report="$RUNNER_TEMP/devenv-update.md"
+          input_total=0
+          input_changed=0
+          {
+            echo "Daily \`devenv update\` report."
+            echo
+            echo "### Inputs checked"
+            echo
+            echo "| Input | Before | After | Result |"
+            echo "| --- | --- | --- | --- |"
+            while IFS= read -r input; do
+              before_node=$(jq -r --arg input "$input" '.nodes[.root].inputs[$input] // empty' "$RUNNER_TEMP/devenv.before.lock")
+              after_node=$(jq -r --arg input "$input" '.nodes[.root].inputs[$input] // empty' devenv.lock)
+              before=$(jq -r --arg node "$before_node" '.nodes[$node].locked.rev // .nodes[$node].locked.narHash // "not locked"' "$RUNNER_TEMP/devenv.before.lock")
+              after=$(jq -r --arg node "$after_node" '.nodes[$node].locked.rev // .nodes[$node].locked.narHash // "not locked"' devenv.lock)
+              input_total=$((input_total + 1))
+              if [ "$before" = "$after" ]; then
+                result="checked, unchanged"
+              else
+                result="moved"
+                input_changed=$((input_changed + 1))
+              fi
+              printf "| \`%s\` | \`%s\` | \`%s\` | %s |\n" "$input" "$before" "$after" "$result"
+            done < <(
+              { jq -r '.nodes[.root].inputs | keys[]' "$RUNNER_TEMP/devenv.before.lock"; jq -r '.nodes[.root].inputs | keys[]' devenv.lock; } | sort -u
+            )
+            input_unchanged=$((input_total - input_changed))
+            echo
+            echo "\`devenv update\` checked $input_total locked inputs: $input_changed changed and $input_unchanged remained unchanged."
+            echo
+            echo "### Development tools"
+            echo
+            echo "| Tool | Before | After | Result |"
+            echo "| --- | --- | --- | --- |"
+            while IFS= read -r tool; do
+              before=$(awk -F '\t' -v tool="$tool" '$1 == tool { $1=""; sub(/^\t?/, ""); print; exit }' "$RUNNER_TEMP/tools.before.tsv")
+              after=$(awk -F '\t' -v tool="$tool" '$1 == tool { $1=""; sub(/^\t?/, ""); print; exit }' "$RUNNER_TEMP/tools.after.tsv")
+              if [ "$before" = "$after" ]; then result="unchanged"; else result="changed"; fi
+              printf "| \`%s\` | \`%s\` | \`%s\` | %s |\n" "$tool" "$before" "$after" "$result"
+            done < <(
+              { cut -f1 "$RUNNER_TEMP/tools.before.tsv"; cut -f1 "$RUNNER_TEMP/tools.after.tsv"; } | sort -u
+            )
+          } >"$report"
+          cat "$report" >>"$GITHUB_STEP_SUMMARY"
+          if cmp -s "$RUNNER_TEMP/devenv.before.lock" devenv.lock; then
+            echo "has_changes=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push the lock update
+        if: steps.report.outputs.has_changes == 'true'
+        run: |
+          branch=automation/devenv-inputs
+          git switch -C "$branch"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add devenv.lock
+          git commit -m "chore(devenv): update inputs"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+      - name: Create or update the chore pull request
+        if: steps.report.outputs.has_changes == 'true'
+        id: pull-request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=automation/devenv-inputs
+          base=${{ github.event.repository.default_branch }}
+          url=$(gh pr list --head "$branch" --base "$base" --state open --json url --jq '.[0].url // empty')
+          if [ -z "$url" ]; then
+            url=$(gh pr create --head "$branch" --base "$base" --title "chore(devenv): update inputs" --body-file "$RUNNER_TEMP/devenv-update.md")
+          else
+            gh pr edit "$url" --title "chore(devenv): update inputs" --body-file "$RUNNER_TEMP/devenv-update.md"
+          fi
+          echo "url=$url" >>"$GITHUB_OUTPUT"
+
+      - name: Merge the verified update
+        if: steps.report.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.pull-request.outputs.url }}
+        run: |
+          base=${{ github.event.repository.default_branch }}
+          git fetch origin "$base"
+          validated_base=$(cat "$RUNNER_TEMP/validated-base")
+          current_base=$(git rev-parse "origin/$base")
+          if [ "$validated_base" != "$current_base" ]; then
+            echo "The default branch advanced after validation; preserving the PR for a fresh validated run." >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          head_sha=$(git rev-parse HEAD)
+          gh pr merge --squash --delete-branch --match-head-commit "$head_sha" "$PR_URL"

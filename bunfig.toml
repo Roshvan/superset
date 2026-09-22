@@ -13,7 +13,14 @@ minimumReleaseAge = 259200
 # hono 4.12.34 (published 2026-08-03) is a security release fixing a ReDoS
 # in the CORS middleware (GHSA-8j4g-w8fx-2239); version is pinned exact.
 # Safe to remove this exclusion after 2026-08-06.
+# Cloudflare's 2026-09-22 Workers releases are the explicitly requested
+# toolchain upgrade. Safe to remove these exclusions after 2026-09-25.
 minimumReleaseAgeExcludes = [
+	"@cloudflare/workers-types",
+	"@cloudflare/unenv-preset",
+	"miniflare",
+	"workerd",
+	"wrangler",
 	"next",
 	"hono",
 	"@next/env",

@@ -51,13 +51,10 @@ jobs:
         run: |
           devenv shell devenv-tool-versions >"$RUNNER_TEMP/tools.after.tsv"
           report="$RUNNER_TEMP/devenv-update.md"
+          inputs_table="$RUNNER_TEMP/devenv-inputs.md"
           input_total=0
           input_changed=0
           {
-            echo "Daily \`devenv update\` report."
-            echo
-            echo "### Inputs checked"
-            echo
             echo "| Input | Before | After | Result |"
             echo "| --- | --- | --- | --- |"
             while IFS= read -r input; do
@@ -76,9 +73,18 @@ jobs:
             done < <(
               { jq -r '.nodes[.root].inputs | keys[]' "$RUNNER_TEMP/devenv.before.lock"; jq -r '.nodes[.root].inputs | keys[]' devenv.lock; } | sort -u
             )
-            input_unchanged=$((input_total - input_changed))
+          } >"$inputs_table"
+          input_unchanged=$((input_total - input_changed))
+          summary="\`devenv update\` checked $input_total locked inputs: $input_changed changed and $input_unchanged remained unchanged."
+          intro="Runs devenv update against every configured input. The report distinguishes inputs that moved from inputs that were checked but stayed pinned, then shows the exact resulting development-tool changes."
+          {
+            echo "$intro"
             echo
-            echo "\`devenv update\` checked $input_total locked inputs: $input_changed changed and $input_unchanged remained unchanged."
+            echo "$summary"
+            echo
+            echo "### Inputs checked"
+            echo
+            cat "$inputs_table"
             echo
             echo "### Development tools"
             echo
@@ -93,6 +99,12 @@ jobs:
               { cut -f1 "$RUNNER_TEMP/tools.before.tsv"; cut -f1 "$RUNNER_TEMP/tools.after.tsv"; } | sort -u
             )
           } >"$report"
+          test "$(sed -n '1p' "$report")" = "$intro"
+          summary_line=$(grep -nFx "$summary" "$report" | cut -d: -f1)
+          inputs_line=$(grep -nFx "### Inputs checked" "$report" | cut -d: -f1)
+          tools_line=$(grep -nFx "### Development tools" "$report" | cut -d: -f1)
+          test "$summary_line" -lt "$inputs_line"
+          test "$inputs_line" -lt "$tools_line"
           cat "$report" >>"$GITHUB_STEP_SUMMARY"
           if cmp -s "$RUNNER_TEMP/devenv.before.lock" devenv.lock; then
             echo "has_changes=false" >>"$GITHUB_OUTPUT"

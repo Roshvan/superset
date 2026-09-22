@@ -85,8 +85,8 @@ jobs:
             echo "| Tool | Before | After | Result |"
             echo "| --- | --- | --- | --- |"
             while IFS= read -r tool; do
-              before=$(awk -F '\t' -v tool="$tool" '$1 == tool { $1=""; sub(/^\t?/, ""); print; exit }' "$RUNNER_TEMP/tools.before.tsv")
-              after=$(awk -F '\t' -v tool="$tool" '$1 == tool { $1=""; sub(/^\t?/, ""); print; exit }' "$RUNNER_TEMP/tools.after.tsv")
+              before=$(awk -F '\t' -v tool="$tool" '$1 == tool { sub(/^[^\t]*\t/, ""); print; exit }' "$RUNNER_TEMP/tools.before.tsv")
+              after=$(awk -F '\t' -v tool="$tool" '$1 == tool { sub(/^[^\t]*\t/, ""); print; exit }' "$RUNNER_TEMP/tools.after.tsv")
               if [ "$before" = "$after" ]; then result="unchanged"; else result="changed"; fi
               printf "| \`%s\` | \`%s\` | \`%s\` | %s |\n" "$tool" "$before" "$after" "$result"
             done < <(

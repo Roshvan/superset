@@ -14,7 +14,9 @@
   '';
 
   enterTest = ''
-    bun install --frozen-lockfile --ignore-scripts
+    # workerd's trusted postinstall provides the current platform binary when
+    # Bun's cross-platform lock does not materialize its optional package.
+    bun install --frozen-lockfile
     git diff --exit-code -- bun.lock
     bun run lint
     git diff --exit-code -- bun.lock

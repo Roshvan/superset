@@ -15,7 +15,9 @@
 
   enterTest = ''
     bun install --frozen-lockfile --ignore-scripts
+    git diff --exit-code -- bun.lock
     bun run lint
+    git diff --exit-code -- bun.lock
     bun run typecheck
     (cd apps/electric-proxy && bunx wrangler deploy --dry-run)
   '';

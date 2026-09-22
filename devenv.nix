@@ -10,6 +10,7 @@
 
   scripts.devenv-tool-versions.exec = ''
     printf 'bun\t%s\n' "$(bun --version)"
+    printf 'ripgrep\t%s\n' "$(rg --version | head -n 1)"
   '';
 
   enterTest = ''

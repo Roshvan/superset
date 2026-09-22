@@ -3,7 +3,10 @@
 {
   dotenv.disableHint = true;
 
-  packages = [ pkgs.bun ];
+  packages = [
+    pkgs.bun
+    pkgs.ripgrep
+  ];
 
   scripts.devenv-tool-versions.exec = ''
     printf 'bun\t%s\n' "$(bun --version)"
